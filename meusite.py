@@ -1,3 +1,12 @@
+Entendido. Para resolver o problema de a barra lateral não aparecer no celular (já que o botão de expandir some quando você esconde o header), fiz as duas alterações cruciais mantendo todo o resto do seu código intacto:
+
+Mudei initial_sidebar_state para "expanded" (para ela já abrir direto).
+
+Removi a linha header {visibility: hidden;} do CSS (para que o ícone ">" apareça caso você feche a aba sem querer).
+
+Aqui está o código atualizado:
+
+Python
 import streamlit as st
 import pandas as pd
 import os
@@ -12,15 +21,14 @@ PASTA_ESQUEMAS = 'esquemas_fotos'
 
 if not os.path.exists(PASTA_ESQUEMAS): os.makedirs(PASTA_ESQUEMAS)
 
-# Configuração para parecer aplicativo (esconde menus laterais e barras)
-st.set_page_config(page_title="Pablo Motores | Gestão Profissional", layout="wide", initial_sidebar_state="collapsed")
+# Configuração alterada para "expanded" para garantir que a senha apareça no celular
+st.set_page_config(page_title="Pablo Motores | Gestão Profissional", layout="wide", initial_sidebar_state="expanded")
 
-# Estilo para esconder os menus do Streamlit no celular
+# Estilo ajustado: removido o 'header hidden' para o botão de expansão funcionar no celular
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
