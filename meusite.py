@@ -5,7 +5,7 @@ import google.generativeai as genai
 from PIL import Image
 
 # --- CONFIGURAÇÃO DA IA (GEMINI) ---
-CHAVE_API = "AIzaSyDM8hUnNRwHz273er2BcqQwTIcPQmKECC0"
+CHAVE_API = "AIzaSyBcwcsk-wcOGIeHZAuEoGjx4LkNQA5CCF4"
 genai.configure(api_key=CHAVE_API)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -71,3 +71,4 @@ if os.path.exists(ARQUIVO_CSV):
         st.error(f"Erro ao carregar dados: {e}")
 else:
     st.info("Aguardando o primeiro envio de dados do PC da oficina...")
+
