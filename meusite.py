@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import os
 import hashlib
+from datetime import datetime
 from PIL import Image
 
-# --- 1. CONFIGURAÇÕES ---
+# --- 1. CONFIGURAÇÕES E PASTAS ---
 ARQUIVO_USUARIOS = 'usuarios.csv'
 ARQUIVO_CSV = 'meubancodedados.csv'
 LINK_SHEETS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTFbH81UYKGJ6dQvKotxdv4hDxecLmiGUPHN46iexbw8NeS8_e2XdyZnZ8WJnL2XRTLCbFDbBKo_NGE/pub?output=csv"
@@ -13,47 +14,36 @@ CHAVE_MESTRA_CHEFIA = "PABLO2026"
 
 if not os.path.exists(PASTA_ESQUEMAS): os.makedirs(PASTA_ESQUEMAS)
 
-# --- 2. FUNÇÕES DE SEGURANÇA (VERSÃO CORRIGIDA) ---
+st.set_page_config(page_title="Pablo Motores | Gestão Profissional", layout="wide", initial_sidebar_state="expanded")
+
+# --- 2. FUNÇÕES DE SEGURANÇA (LOGIN) ---
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
-def criar_csv_correto():
-    """Força a criação do arquivo com o cabeçalho que o Pandas entende"""
+def criar_csv_usuarios():
     df = pd.DataFrame(columns=['usuario', 'senha', 'funcoes', 'perfil'])
     df.to_csv(ARQUIVO_USUARIOS, index=False, sep=';', encoding='utf-8-sig')
     return df
 
 def salvar_usuario(usuario, senha, funcoes, perfil):
-    # Se o arquivo não existir ou se estiver vazio/errado, recriamos
     if not os.path.exists(ARQUIVO_USUARIOS):
-        df = criar_csv_correto()
+        df = criar_csv_usuarios()
     else:
         try:
             df = pd.read_csv(ARQUIVO_USUARIOS, sep=';', encoding='utf-8-sig')
-            if 'usuario' not in df.columns:
-                df = criar_csv_correto()
         except:
-            df = criar_csv_correto()
+            df = criar_csv_usuarios()
 
-    # Verifica se o nome de usuário já existe
     if usuario.lower() in df['usuario'].astype(str).str.lower().values:
         return False
     
     funcoes_str = "|".join(funcoes)
-    novo_u = pd.DataFrame([{
-        'usuario': usuario.lower(), 
-        'senha': hash_senha(senha), 
-        'funcoes': funcoes_str, 
-        'perfil': perfil
-    }])
-    
-    # Adiciona o novo usuário ao arquivo
+    novo_u = pd.DataFrame([{'usuario': usuario.lower(), 'senha': hash_senha(senha), 'funcoes': funcoes_str, 'perfil': perfil}])
     novo_u.to_csv(ARQUIVO_USUARIOS, mode='a', header=False, index=False, sep=';', encoding='utf-8-sig')
     return True
 
 def validar_login(usuario, senha):
-    if not os.path.exists(ARQUIVO_USUARIOS):
-        return False
+    if not os.path.exists(ARQUIVO_USUARIOS): return False
     try:
         df = pd.read_csv(ARQUIVO_USUARIOS, sep=';', encoding='utf-8-sig')
         senha_h = hash_senha(senha)
@@ -64,9 +54,34 @@ def validar_login(usuario, senha):
         pass
     return False
 
-# --- 3. INTERFACE DE ENTRADA ---
-st.set_page_config(page_title="Pablo União", layout="wide", page_icon="⚙️")
+# --- 3. FUNÇÕES DE DADOS (MOTORES) ---
+@st.cache_data(ttl=60)
+def carregar_dados():
+    dfs = []
+    try:
+        df_nuvem = pd.read_csv(LINK_SHEETS, dtype=str, storage_options={'timeout': 5})
+        if not df_nuvem.empty:
+            df_nuvem.columns = df_nuvem.columns.str.strip()
+            dfs.append(df_nuvem)
+    except: pass
 
+    if os.path.exists(ARQUIVO_CSV):
+        try:
+            df_local = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig', dtype=str)
+            if not df_local.empty:
+                df_local.columns = df_local.columns.str.strip()
+                dfs.append(df_local)
+        except: pass
+
+    if not dfs: return pd.DataFrame()
+    df_geral = pd.concat(dfs, ignore_index=True).fillna("None")
+    colunas_chave = ['Marca', 'Potencia_CV', 'RPM']
+    colunas_presentes = [c for c in colunas_chave if c in df_geral.columns]
+    if colunas_presentes:
+        df_geral = df_geral.drop_duplicates(subset=colunas_presentes, keep='first')
+    return df_geral
+
+# --- 4. FLUXO DE ACESSO ---
 if 'user_data' not in st.session_state:
     st.session_state['user_data'] = None
 
@@ -91,62 +106,117 @@ if not st.session_state['user_data']:
             nu = st.text_input("Escolha um Usuário", key="cad_u")
             ns = st.text_input("Escolha uma Senha", type="password", key="cad_s")
             st.markdown("---")
-            st.write("📂 **Suas áreas de atuação:**")
-            fm = st.checkbox("Mecânica 🔧")
-            fr = st.checkbox("Rebobinagem ⚡")
-            fc = st.checkbox("Chefia / Admin 👑")
+            st.write("📂 **Suas áreas de acesso:**")
+            fr = st.checkbox("Acesso a Rebobinagem/Consulta ⚡")
+            fc = st.checkbox("Chefia / Admin (Cadastro e Edição) 👑")
             
             chave = ""
-            if fc:
-                chave = st.text_input("Chave de Acesso Chefia", type="password")
+            if fc: chave = st.text_input("Chave de Acesso Chefia", type="password")
             
             if st.button("FINALIZAR CADASTRO ✅", use_container_width=True):
-                f_list = []
-                if fm: f_list.append("mecanica")
-                if fr: f_list.append("rebobinagem")
-                if fc: f_list.append("chefia")
-                
-                if not f_list:
-                    st.warning("Selecione pelo menos uma função.")
-                elif fc and chave != CHAVE_MESTRA_CHEFIA:
+                if fc and chave != CHAVE_MESTRA_CHEFIA:
                     st.error("Chave de Chefia incorreta!")
                 elif nu and ns:
-                    perf = "admin" if fc else "mecanico"
+                    perf = "admin" if fc else "usuario"
+                    f_list = ["consulta", "rebobinagem"]
+                    if fc: f_list.append("admin")
                     if salvar_usuario(nu, ns, f_list, perf):
                         st.success("Conta criada! Vá na aba ACESSAR.")
                     else:
                         st.error("Esse usuário já existe.")
     st.stop()
 
-# --- 4. ÁREA DO SISTEMA (PÓS-LOGIN) ---
+# --- 5. ÁREA DO SISTEMA (PÓS-LOGIN) ---
 user = st.session_state['user_data']
-funcoes_liberadas = str(user['funcoes']).split("|")
+e_admin = (user['perfil'] == 'admin')
 
-st.sidebar.title("🛠️ PABLO UNIÃO")
-st.sidebar.write(f"👤 Olá, **{user['usuario'].upper()}**")
-if st.sidebar.button("Sair"):
-    st.session_state['user_data'] = None
-    st.rerun()
+with st.sidebar:
+    st.header(f"👤 {user['usuario'].upper()}")
+    menu = ["🔍 CONSULTA"]
+    if e_admin:
+        menu += ["➕ NOVO CADASTRO", "🖼️ ADICIONAR FOTO", "🗑️ LIXEIRA"]
+    
+    escolha = st.radio("Navegação:", menu)
+    
+    if st.button("Sair / Logoff"):
+        st.session_state['user_data'] = None
+        st.rerun()
 
-# Criar abas baseadas no que o usuário marcou no cadastro
-abas_visiveis = []
-if "mecanica" in funcoes_liberadas or user['perfil'] == "admin":
-    abas_visiveis.append("🔧 MECÂNICA")
-if "rebobinagem" in funcoes_liberadas or user['perfil'] == "admin":
-    abas_visiveis.append("⚡ REBOBINAGEM")
-if user['perfil'] == "admin":
-    abas_visiveis.append("📊 ADMINISTRAÇÃO")
+# --- LOGICA DAS PÁGINAS ---
 
-if abas_visiveis:
-    tabs = st.tabs(abas_visiveis)
-    for i, nome_tab in enumerate(abas_visiveis):
-        with tabs[i]:
-            if "MECÂNICA" in nome_tab:
-                st.subheader("Setor Mecânico")
-                st.info("Aqui entrarão os dados de rolamentos e medidas de eixos.")
-            if "REBOBINAGEM" in nome_tab:
-                st.subheader("Setor de Rebobinagem")
-                st.info("Aqui você acessa os esquemas e o simulador de fios.")
-            if "ADMINISTRAÇÃO" in nome_tab:
-                st.subheader("Painel da Chefia")
-                st.warning("Acesso restrito para gestão de dados.")
+if escolha == "🔍 CONSULTA":
+    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>⚙️ CONSULTA DE MOTORES</h1>", unsafe_allow_html=True)
+    df = carregar_dados()
+    busca = st.text_input("🔍 Pesquisar por Marca, CV ou detalhes...")
+    if not df.empty:
+        df_f = df[df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)] if busca else df
+        for idx, row in df_f.iterrows():
+            with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV | {row.get('RPM')} RPM"):
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    st.markdown("### 📊 GERAL")
+                    st.write(f"**Polos:** {row.get('Polaridade')}")
+                    st.write(f"**Volt:** {row.get('Voltagem')}")
+                with c2:
+                    st.markdown("### 🌀 PRINCIPAL")
+                    st.write(f"**Fio:** {row.get('Fio_Principal')}")
+                with c3:
+                    st.markdown("### ⚡ AUXILIAR")
+                    st.write(f"**Capacitor:** {row.get('Capacitor')}")
+                with c4:
+                    st.markdown("### 🔗 LIGAÇÃO")
+                    lig = str(row.get('Esquema_Marcado'))
+                    for n in lig.split(" / "):
+                        for ext in [".png", ".jpg", ".jpeg"]:
+                            p = os.path.join(PASTA_ESQUEMAS, f"{n.strip()}{ext}")
+                            if os.path.exists(p): st.image(p)
+
+elif escolha == "➕ NOVO CADASTRO" and e_admin:
+    st.markdown("## ➕ Cadastrar Novo Motor")
+    lista_fotos = [f.split(".")[0] for f in os.listdir(PASTA_ESQUEMAS) if f.endswith(('.png', '.jpg', '.jpeg'))]
+    with st.form("cadastro_pablo"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            marca = st.text_input("Marca"); cv = st.text_input("Potência (CV)"); rpm = st.text_input("RPM")
+            pol = st.text_input("Polaridade"); volt = st.text_input("Voltagem"); amp = st.text_input("Amperagem")
+        with c2:
+            camas_p = st.text_input("Grupo Principal"); fio_p = st.text_input("Fio Principal")
+            rolam = st.text_input("Rolamentos"); eixo_x = st.text_input("Eixo X")
+        with c3:
+            camas_a = st.text_input("Grupo Auxiliar"); fio_a = st.text_input("Fio Auxiliar")
+            capac = st.text_input("Capacitor"); eixo_y = st.text_input("Eixo Y")
+        
+        selecionados = []
+        if lista_fotos:
+            st.markdown("### 🖼️ Esquemas")
+            cols = st.columns(4)
+            for i, foto in enumerate(lista_fotos):
+                if cols[i % 4].checkbox(foto): selecionados.append(foto)
+        
+        if st.form_submit_button("💾 SALVAR DADOS"):
+            novo_motor = {
+                'Marca': marca, 'Potencia_CV': cv, 'RPM': rpm, 'Polaridade': pol,
+                'Voltagem': volt, 'Amperagem': amp, 'Fio_Principal': fio_p,
+                'Bobina_Principal': camas_p, 'Rolamentos': rolam, 'Fio_Auxiliar': fio_a,
+                'Bobina_Auxiliar': camas_a, 'Capacitor': capac, 'Eixo_X': eixo_x, 
+                'Eixo_Y': eixo_y, 'Esquema_Marcado': " / ".join(selecionados) if selecionados else "None"
+            }
+            pd.DataFrame([novo_motor]).to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
+            st.success("Motor salvo!"); st.cache_data.clear()
+
+elif escolha == "🖼️ ADICIONAR FOTO" and e_admin:
+    st.markdown("### 🖼️ Enviar Novo Esquema")
+    arq = st.file_uploader("Escolha a imagem do esquema", type=['png', 'jpg', 'jpeg'])
+    nome_f = st.text_input("Nome do Esquema (Ex: Weg_6_Cabos)")
+    if st.button("Gravar") and arq and nome_f:
+        Image.open(arq).save(os.path.join(PASTA_ESQUEMAS, f"{nome_f}.png"))
+        st.success("Foto salva com sucesso!")
+
+elif escolha == "🗑️ LIXEIRA" and e_admin:
+    st.markdown("## 🗑️ Gerenciar Banco de Dados")
+    df = carregar_dados()
+    if not df.empty:
+        st.dataframe(df)
+        if st.button("EXCLUIR TODO O BANCO DE DADOS"):
+            if os.path.exists(ARQUIVO_CSV):
+                os.remove(ARQUIVO_CSV); st.warning("Banco apagado."); st.cache_data.clear(); st.rerun()
