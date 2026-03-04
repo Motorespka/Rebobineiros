@@ -76,9 +76,8 @@ def carregar_dados():
     if not dfs: return pd.DataFrame()
     df_geral = pd.concat(dfs, ignore_index=True).fillna("None")
     colunas_chave = ['Marca', 'Potencia_CV', 'RPM']
-    colunas_presentes = [c for c in colunas_chave if c in df_geral.columns]
-    if colunas_presentes:
-        df_geral = df_geral.drop_duplicates(subset=colunas_presentes, keep='first')
+    if all(c in df_geral.columns for c in colunas_chave):
+        df_geral = df_geral.drop_duplicates(subset=colunas_chave, keep='first')
     return df_geral
 
 # --- 4. FLUXO DE ACESSO ---
@@ -106,20 +105,26 @@ if not st.session_state['user_data']:
             nu = st.text_input("Escolha um Usuário", key="cad_u")
             ns = st.text_input("Escolha uma Senha", type="password", key="cad_s")
             st.markdown("---")
-            st.write("📂 **Suas áreas de acesso:**")
-            fr = st.checkbox("Acesso a Rebobinagem/Consulta ⚡")
-            fc = st.checkbox("Chefia / Admin (Cadastro e Edição) 👑")
+            st.write("📂 **Selecione sua função principal:**")
+            fm = st.checkbox("Mecânica 🔧")
+            fr = st.checkbox("Rebobinagem ⚡")
+            fc = st.checkbox("Chefia / Admin 👑")
             
             chave = ""
             if fc: chave = st.text_input("Chave de Acesso Chefia", type="password")
             
             if st.button("FINALIZAR CADASTRO ✅", use_container_width=True):
-                if fc and chave != CHAVE_MESTRA_CHEFIA:
+                f_list = []
+                if fm: f_list.append("mecanica")
+                if fr: f_list.append("rebobinagem")
+                if fc: f_list.append("admin")
+
+                if not f_list:
+                    st.warning("Selecione pelo menos uma função.")
+                elif fc and chave != CHAVE_MESTRA_CHEFIA:
                     st.error("Chave de Chefia incorreta!")
                 elif nu and ns:
                     perf = "admin" if fc else "usuario"
-                    f_list = ["consulta", "rebobinagem"]
-                    if fc: f_list.append("admin")
                     if salvar_usuario(nu, ns, f_list, perf):
                         st.success("Conta criada! Vá na aba ACESSAR.")
                     else:
@@ -129,23 +134,37 @@ if not st.session_state['user_data']:
 # --- 5. ÁREA DO SISTEMA (PÓS-LOGIN) ---
 user = st.session_state['user_data']
 e_admin = (user['perfil'] == 'admin')
+funcoes_usuario = str(user.get('funcoes', '')).split("|")
 
 with st.sidebar:
-    st.header(f"👤 {user['usuario'].upper()}")
+    st.markdown(f"### 👤 {user['usuario'].upper()}")
+    
+    # --- SISTEMA DE SELOS (BADGES) ---
+    selos_html = '<div style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;">'
+    if e_admin:
+        selos_html += '<span style="background-color: #f1c40f; color: black; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">👑 ADMIN</span>'
+    if "rebobinagem" in funcoes_usuario:
+        selos_html += '<span style="background-color: #3498db; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">⚡ REBOBINADOR</span>'
+    if "mecanica" in funcoes_usuario:
+        selos_html += '<span style="background-color: #2ecc71; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">🔧 MECÂNICO</span>'
+    selos_html += '</div>'
+    
+    st.markdown(selos_html, unsafe_allow_html=True)
+    st.markdown("---")
+
     menu = ["🔍 CONSULTA"]
     if e_admin:
         menu += ["➕ NOVO CADASTRO", "🖼️ ADICIONAR FOTO", "🗑️ LIXEIRA"]
     
     escolha = st.radio("Navegação:", menu)
-    
-    if st.button("Sair / Logoff"):
+    st.markdown("---")
+    if st.button("Sair / Logoff", use_container_width=True):
         st.session_state['user_data'] = None
         st.rerun()
 
-# --- LOGICA DAS PÁGINAS ---
-
+# --- LÓGICA DAS PÁGINAS ---
 if escolha == "🔍 CONSULTA":
-    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>⚙️ CONSULTA DE MOTORES</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #f1c40f;'>⚙️ PABLO MOTORES</h1>", unsafe_allow_html=True)
     df = carregar_dados()
     busca = st.text_input("🔍 Pesquisar por Marca, CV ou detalhes...")
     if not df.empty:
@@ -155,14 +174,13 @@ if escolha == "🔍 CONSULTA":
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     st.markdown("### 📊 GERAL")
-                    st.write(f"**Polos:** {row.get('Polaridade')}")
-                    st.write(f"**Volt:** {row.get('Voltagem')}")
+                    st.write(f"**Polos:** {row.get('Polaridade')}"); st.write(f"**Volt:** {row.get('Voltagem')}")
                 with c2:
                     st.markdown("### 🌀 PRINCIPAL")
-                    st.write(f"**Fio:** {row.get('Fio_Principal')}")
+                    st.write(f"**Grupo:** {row.get('Bobina_Principal')}"); st.write(f"**Fio:** {row.get('Fio_Principal')}")
                 with c3:
                     st.markdown("### ⚡ AUXILIAR")
-                    st.write(f"**Capacitor:** {row.get('Capacitor')}")
+                    st.write(f"**Fio:** {row.get('Fio_Auxiliar')}"); st.write(f"**Capacitor:** {row.get('Capacitor')}")
                 with c4:
                     st.markdown("### 🔗 LIGAÇÃO")
                     lig = str(row.get('Esquema_Marcado'))
@@ -188,35 +206,34 @@ elif escolha == "➕ NOVO CADASTRO" and e_admin:
         
         selecionados = []
         if lista_fotos:
-            st.markdown("### 🖼️ Esquemas")
+            st.markdown("### 🖼️ Selecione os Esquemas")
             cols = st.columns(4)
             for i, foto in enumerate(lista_fotos):
                 if cols[i % 4].checkbox(foto): selecionados.append(foto)
         
         if st.form_submit_button("💾 SALVAR DADOS"):
-            novo_motor = {
-                'Marca': marca, 'Potencia_CV': cv, 'RPM': rpm, 'Polaridade': pol,
-                'Voltagem': volt, 'Amperagem': amp, 'Fio_Principal': fio_p,
-                'Bobina_Principal': camas_p, 'Rolamentos': rolam, 'Fio_Auxiliar': fio_a,
-                'Bobina_Auxiliar': camas_a, 'Capacitor': capac, 'Eixo_X': eixo_x, 
-                'Eixo_Y': eixo_y, 'Esquema_Marcado': " / ".join(selecionados) if selecionados else "None"
+            novo = {
+                'Marca': marca, 'Potencia_CV': cv, 'RPM': rpm, 'Polaridade': pol, 'Voltagem': volt, 'Amperagem': amp,
+                'Fio_Principal': fio_p, 'Bobina_Principal': camas_p, 'Rolamentos': rolam, 'Fio_Auxiliar': fio_a,
+                'Bobina_Auxiliar': camas_a, 'Capacitor': capac, 'Eixo_X': eixo_x, 'Eixo_Y': eixo_y,
+                'Esquema_Marcado': " / ".join(selecionados) if selecionados else "None"
             }
-            pd.DataFrame([novo_motor]).to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
+            pd.DataFrame([novo]).to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
             st.success("Motor salvo!"); st.cache_data.clear()
 
 elif escolha == "🖼️ ADICIONAR FOTO" and e_admin:
     st.markdown("### 🖼️ Enviar Novo Esquema")
-    arq = st.file_uploader("Escolha a imagem do esquema", type=['png', 'jpg', 'jpeg'])
-    nome_f = st.text_input("Nome do Esquema (Ex: Weg_6_Cabos)")
+    arq = st.file_uploader("Escolha a imagem", type=['png', 'jpg', 'jpeg'])
+    nome_f = st.text_input("Nome do Esquema")
     if st.button("Gravar") and arq and nome_f:
         Image.open(arq).save(os.path.join(PASTA_ESQUEMAS, f"{nome_f}.png"))
-        st.success("Foto salva com sucesso!")
+        st.success("Esquema salvo!"); st.rerun()
 
 elif escolha == "🗑️ LIXEIRA" and e_admin:
-    st.markdown("## 🗑️ Gerenciar Banco de Dados")
+    st.markdown("## 🗑️ Lixeira")
     df = carregar_dados()
     if not df.empty:
         st.dataframe(df)
-        if st.button("EXCLUIR TODO O BANCO DE DADOS"):
+        if st.button("LIMPAR TODO O BANCO DE DADOS"):
             if os.path.exists(ARQUIVO_CSV):
-                os.remove(ARQUIVO_CSV); st.warning("Banco apagado."); st.cache_data.clear(); st.rerun()
+                os.remove(ARQUIVO_CSV); st.warning("Dados apagados."); st.cache_data.clear(); st.rerun()
