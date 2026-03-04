@@ -3,158 +3,116 @@ import pandas as pd
 import os
 from PIL import Image
 
-# --- CONFIGURAÇÕES DE DIRETÓRIOS ---
+# --- CONFIGURAÇÕES ---
 ARQUIVO_CSV = 'meubancodedados.csv'
 PASTA_ESQUEMAS = 'esquemas_fotos'
-if not os.path.exists(PASTA_ESQUEMAS):
-    os.makedirs(PASTA_ESQUEMAS)
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Pablo Motores | Gestão Pro", layout="wide")
+st.set_page_config(page_title="Pablo Motores | Gestão", layout="wide")
 
-# --- CSS DE ALTO CONTRASTE (PARA ENXERGAR TUDO) ---
+# --- CSS REFINADO (PC E VISIBILIDADE) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0b0e14; }
+    .stApp { background-color: #0e1117; }
     
-    /* Força títulos e labels em Amarelo Vibrante */
-    label, .stMarkdown h3, .stMarkdown b, p {
+    /* Títulos das Seções */
+    .titulo-secao {
         color: #f1c40f !important;
-        font-weight: 800 !important;
         font-size: 1.1rem !important;
-    }
-
-    /* Campos de entrada Brancos com Letra Preta */
-    input, textarea, [data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #000000 !important;
         font-weight: bold !important;
-        border: 2px solid #f1c40f !important;
+        border-bottom: 2px solid #f1c40f;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
 
-    /* Botões Amarelos com letra preta */
-    .stButton>button {
-        background-color: #f1c40f !important;
-        color: #000000 !important;
-        font-weight: 900 !important;
-        border: 2px solid #ffffff !important;
+    /* Cards de Dados */
+    .dado-item {
+        margin-bottom: 8px;
+        font-size: 1rem !important;
+    }
+    .dado-label { color: #888 !important; font-weight: normal !important; }
+    .dado-valor { color: #ffffff !important; font-weight: bold !important; }
+
+    /* Caixa de Ligações (Destaque) */
+    .caixa-ligacao {
+        background-color: #1e2130;
+        border: 1px solid #f1c40f;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+    }
+    .texto-ligacao {
+        color: #f1c40f !important;
+        font-size: 1.2rem !important;
+        font-weight: bold !important;
     }
 
-    /* Ajuste para as abas (Tabs) */
-    button[data-baseweb="tab"] { color: #ffffff !important; }
-    button[data-baseweb="tab"][aria-selected="true"] { color: #f1c40f !important; border-bottom-color: #f1c40f !important; }
+    /* Inputs e Expander */
+    input { background-color: #ffffff !important; color: #000000 !important; }
+    .streamlit-expanderHeader { 
+        background-color: #1c202a !important; 
+        border: 1px solid #34495e !important;
+        border-radius: 8px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIN ADMIN ---
-with st.sidebar:
-    st.markdown("### 🔐 PAINEL ADMIN")
-    senha = st.text_input("Senha Admin", type="password")
-    e_admin = (senha == "pablo123")
-
+# --- CABEÇALHO ---
 st.markdown("<h1 style='text-align: center; color: #f1c40f;'>⚙️ PABLO MOTORES</h1>", unsafe_allow_html=True)
 
 # --- CARREGAR DADOS ---
 if os.path.exists(ARQUIVO_CSV):
-    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig').fillna("---").replace("None", "---")
+    df = pd.read_csv(ARQUIVO_CSV, sep=';', encoding='utf-8-sig').fillna("---")
 else:
     df = pd.DataFrame()
 
-opcoes_esquemas = [f.replace(".png", "").replace(".jpg", "") for f in os.listdir(PASTA_ESQUEMAS) if f.endswith(('.png', '.jpg'))]
+# --- CONSULTA ---
+busca = st.text_input("🔍 Pesquise por Marca, Potência ou Detalhes...")
 
-# --- NAVEGAÇÃO ---
-abas = ["🔍 CONSULTA", "➕ NOVO CADASTRO", "🖼️ ESQUEMAS"] if e_admin else ["🔍 CONSULTA"]
-tabs = st.tabs(abas)
+if not df.empty:
+    df_f = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)] if busca else df
+    
+    for idx, row in df_f.iterrows():
+        # Título do Expander mais limpo
+        label_motor = f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV | {row.get('RPM')} RPM"
+        with st.expander(label_motor):
+            
+            # Grid Principal
+            col1, col2, col3, col4 = st.columns([1, 1, 1, 1.2])
 
-# --- ABA 1: CONSULTA (COM TODAS AS INFORMAÇÕES) ---
-with tabs[0]:
-    busca = st.text_input("🔎 Pesquisar por Marca ou Potência...")
-    if not df.empty:
-        df_f = df[df.astype(str).apply(lambda x: busca.lower() in x.str.lower().any(), axis=1)] if busca else df
-        for idx, row in df_f.iterrows():
-            with st.expander(f"📦 {row.get('Marca')} | {row.get('Potencia_CV')} CV | {row.get('RPM')} RPM"):
-                # Layout em 4 colunas para caber tudo na mesma linha no PC
-                c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
-                
-                with c1:
-                    st.markdown("### 📊 GERAL")
-                    st.write(f"**Polos:** {row.get('Polaridade')}")
-                    st.write(f"**Volt:** {row.get('Voltagem')}")
-                    st.write(f"**Amp:** {row.get('Amperagem')}")
-                    st.write(f"**Capacitor:** {row.get('Capacitor')}")
-
-                with c2:
-                    st.markdown("### 🌀 PRINCIPAL")
-                    st.write(f"**Bobinas:** {row.get('Bobina_Principal')}")
-                    st.write(f"**Fio:** {row.get('Fio_Principal')}")
-                    st.write(f"**Rolam.:** {row.get('Rolamentos')}")
-
-                with c3:
-                    st.markdown("### ⚡ AUXILIAR")
-                    st.write(f"**Bobinas:** {row.get('Bobina_Auxiliar')}")
-                    st.write(f"**Fio:** {row.get('Fio_Auxiliar')}")
-                    st.write(f"**Eixo:** {row.get('Eixo_X')} x {row.get('Eixo_Y')}")
-
-                with c4:
-                    st.markdown("### 🔗 LIGAÇÕES")
-                    ligs = str(row.get('Esquema_Marcado'))
-                    st.info(ligs)
-                    # Mostrar fotos
-                    lista_ligs = ligs.split(" / ")
-                    imgs_cols = st.columns(len(lista_ligs) if len(lista_ligs) > 0 else 1)
-                    for i, nome_lig in enumerate(lista_ligs):
-                        path = os.path.join(PASTA_ESQUEMAS, f"{nome_lig}.png")
-                        if os.path.exists(path):
-                            imgs_cols[i].image(path, use_container_width=True)
-
-# --- ABA 2: NOVO CADASTRO (TODOS OS CAMPOS DE VOLTA) ---
-if e_admin:
-    with tabs[1]:
-        st.markdown("### ➕ NOVO CADASTRO TÉCNICO")
-        with st.form("form_pablo", clear_on_submit=True):
-            col1, col2, col3 = st.columns(3)
             with col1:
-                st.markdown("### 📝 INFORMAÇÕES")
-                marca = st.text_input("Marca")
-                cv = st.text_input("Potência (CV)")
-                rpm = st.text_input("RPM")
-                polos = st.selectbox("Polos", ["2", "4", "6", "8"])
-                volt = st.text_input("Voltagem")
-                amp = st.text_input("Amperagem")
+                st.markdown('<div class="titulo-secao">📊 GERAL</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Polos:</span> <span class="dado-valor">{row.get("Polaridade")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Voltagem:</span> <span class="dado-valor">{row.get("Voltagem")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Amperagem:</span> <span class="dado-valor">{row.get("Amperagem")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Capacitor:</span> <span class="dado-valor">{row.get("Capacitor")}</span></div>', unsafe_allow_html=True)
+
             with col2:
-                st.markdown("### 🧵 DADOS DOS FIOS")
-                b_p = st.text_input("Bobina Principal")
-                f_p = st.text_input("Fio Principal")
-                b_a = st.text_input("Bobina Auxiliar")
-                f_a = st.text_input("Fio Auxiliar")
-                cap = st.text_input("Capacitor")
+                st.markdown('<div class="titulo-secao">🌀 PRINCIPAL</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Camas:</span> <span class="dado-valor">{row.get("Bobina_Principal")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Fio:</span> <span class="dado-valor">{row.get("Fio_Principal")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Rolam.:</span> <span class="dado-valor">{row.get("Rolamentos")}</span></div>', unsafe_allow_html=True)
+
             with col3:
-                st.markdown("### ⚙️ MECÂNICA E LIGAÇÃO")
-                rol = st.text_input("Rolamentos")
-                ex = st.text_input("Eixo X")
-                ey = st.text_input("Eixo Y")
-                st.write("**Marque as Ligações:**")
-                checks = {opt: st.checkbox(opt, key=f"n_{opt}") for opt in opcoes_esquemas}
+                st.markdown('<div class="titulo-secao">⚡ AUXILIAR</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Camas:</span> <span class="dado-valor">{row.get("Bobina_Auxiliar")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Fio:</span> <span class="dado-valor">{row.get("Fio_Auxiliar")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="dado-item"><span class="dado-label">Eixo:</span> <span class="dado-valor">{row.get("Eixo_X")} x {row.get("Eixo_Y")}</span></div>', unsafe_allow_html=True)
 
-            if st.form_submit_button("💾 SALVAR MOTOR"):
-                sel = [n for n, v in checks.items() if v]
-                novo = {
-                    'Marca': marca, 'Potencia_CV': cv, 'RPM': rpm, 'Polaridade': polos,
-                    'Voltagem': volt, 'Amperagem': amp, 'Bobina_Principal': b_p, 'Fio_Principal': f_p,
-                    'Bobina_Auxiliar': b_a, 'Fio_Auxiliar': f_a, 'Capacitor': cap, 
-                    'Rolamentos': rol, 'Eixo_X': ex, 'Eixo_Y': ey, 
-                    'Esquema_Marcado': " / ".join(sel) if sel else "---"
-                }
-                pd.DataFrame([novo]).to_csv(ARQUIVO_CSV, mode='a', header=not os.path.exists(ARQUIVO_CSV), index=False, sep=';', encoding='utf-8-sig')
-                st.success("✅ Motor salvo com sucesso!")
-                st.rerun()
-
-# --- ABA 3: ESQUEMAS (RESTAURADA) ---
-if e_admin:
-    with tabs[2]:
-        st.markdown("### 🖼️ GERENCIAR ESQUEMAS")
-        up = st.file_uploader("Upload da Foto", type=['png', 'jpg'])
-        n_esq = st.text_input("Nome (Ex: Estrela, 2 Polos)")
-        if st.button("Gravar Nova Opção") and up and n_esq:
-            Image.open(up).save(os.path.join(PASTA_ESQUEMAS, f"{n_esq}.png"))
-            st.rerun()
+            with col4:
+                st.markdown('<div class="titulo-secao">🔗 LIGAÇÃO</div>', unsafe_allow_html=True)
+                lig_texto = str(row.get('Esquema_Marcado'))
+                st.markdown(f'''
+                    <div class="caixa-ligacao">
+                        <span class="texto-ligacao">{lig_texto}</span>
+                    </div>
+                ''', unsafe_allow_html=True)
+                
+                # Espaço para fotos (se houver)
+                lista_ligs = lig_texto.split(" / ")
+                for nome_lig in lista_ligs:
+                    path = os.path.join(PASTA_ESQUEMAS, f"{nome_lig.png}")
+                    if os.path.exists(path):
+                        st.image(path, use_container_width=True)
