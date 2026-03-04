@@ -11,7 +11,7 @@ PASTA_UPLOADS = 'uploads_ligacoes'
 if not os.path.exists(PASTA_UPLOADS):
     os.makedirs(PASTA_UPLOADS)
 
-# --- 2. BANCO TÉCNICO AWG (DA SUA IMAGEM) ---
+# --- 2. BANCO TÉCNICO AWG ---
 TABELA_AWG_TECNICA = {
     '4/0': 107.0, '3/0': 85.0, '2/0': 67.4, '1/0': 53.5,
     '1': 42.41, '2': 33.63, '3': 26.67, '4': 21.147, '5': 16.764,
@@ -27,17 +27,19 @@ TABELA_AWG_TECNICA = {
 def carregar_dados(arq, colunas):
     if not os.path.exists(arq) or os.stat(arq).st_size == 0:
         return pd.DataFrame(columns=colunas)
-    df = pd.read_csv(arq, sep=';', encoding='utf-8-sig', dtype=str)
+    # Carrega e substitui imediatamente qualquer valor nulo por vazio ""
+    df = pd.read_csv(arq, sep=';', encoding='utf-8-sig', dtype=str).fillna("")
     for col in colunas:
-        if col not in df.columns: df[col] = "nan"
+        if col not in df.columns: df[col] = ""
     return df
 
 def salvar_dados(df, arq):
-    df.to_csv(arq, index=False, sep=';', encoding='utf-8-sig')
+    # Antes de salvar, garante que nans viraram vazios
+    df.fillna("").to_csv(arq, index=False, sep=';', encoding='utf-8-sig')
 
 def calcular_area_mm2(texto_fio):
     try:
-        if not texto_fio or str(texto_fio) == "nan": return 0.0
+        if not texto_fio or str(texto_fio).lower() in ["nan", ""]: return 0.0
         texto = str(texto_fio).lower().replace('awg', '').strip()
         if 'x' in texto:
             partes = texto.split('x')
@@ -65,111 +67,132 @@ def gerar_sugestoes(area_alvo):
 # --- 4. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Pablo Motores Pro", layout="wide")
 
-# Estilo CSS para Cards
+# CSS para remover bordas indesejadas e melhorar cards
 st.markdown("""
     <style>
-    .motor-card { background-color: #1e1e1e; border-radius: 10px; padding: 20px; border: 1px solid #333; margin-bottom: 20px; }
-    .status-box { padding: 8px; border-radius: 5px; color: white; font-weight: bold; text-align: center; margin-bottom: 5px; }
+    .stExpander { border: 1px solid #444 !important; border-radius: 8px !important; margin-bottom: 10px !important; }
+    .calc-card {
+        background-color: white; 
+        padding: 12px; 
+        border-radius: 8px; 
+        color: black; 
+        margin-bottom: 10px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
 
-COL_MOTORES = ['Marca', 'Potencia_CV', 'RPM', 'Voltagem', 'Amperagem', 'Polaridade', 'Bobina_Principal', 
-               'Fio_Principal', 'Bobina_Auxiliar', 'Fio_Auxiliar', 'Tipo_Ligacao', 'Rolamentos', 
-               'Eixo_X', 'Eixo_Y', 'Capacitor', 'status']
+COL_MOTORES = [
+    'Marca', 'Potencia_CV', 'RPM', 'Voltagem', 'Amperagem', 'Polaridade', 
+    'Bobina_Principal', 'Fio_Principal', 'Bobina_Auxiliar', 'Fio_Auxiliar', 
+    'Tipo_Ligacao', 'Rolamentos', 'Eixo_X', 'Eixo_Y', 'Capacitor', 'status'
+]
 COL_FOTOS = ['nome_ligacao', 'caminho_arquivo']
 
 if 'user_data' not in st.session_state: st.session_state['user_data'] = {'usuario': 'admin', 'perfil': 'admin'}
 
 df_motores = carregar_dados(ARQUIVO_CSV, COL_MOTORES)
 df_fotos = carregar_dados(ARQUIVO_FOTOS, COL_FOTOS)
-lista_ligacoes = ["Nenhuma"] + df_fotos['nome_ligacao'].tolist()
+lista_ligacoes = [""] + df_fotos['nome_ligacao'].tolist()
 
 with st.sidebar:
     st.title("⚙️ PABLO MOTORES")
-    menu = st.radio("Navegação", ["🔍 CONSULTA", "➕ NOVO MOTOR", "🖼️ BIBLIOTECA", "🗑️ LIXEIRA"])
+    menu = st.radio("Menu Principal", ["🔍 CONSULTA", "➕ NOVO MOTOR", "🖼️ BIBLIOTECA", "🗑️ LIXEIRA"])
+    st.divider()
+    st.info("Sistema v3.0 - Estável")
 
-# --- ABA CONSULTA (REFEITA) ---
+# --- ABA CONSULTA ---
 if menu == "🔍 CONSULTA":
-    st.title("🔍 Consulta Técnica de Motores")
-    busca = st.text_input("Busque por Marca, Potência ou Fio...", placeholder="Ex: WEG 2 CV")
+    st.header("🔍 Banco de Dados Técnico")
+    busca = st.text_input("Filtrar motor...", placeholder="Digite marca, potência ou bitola...")
     
     df_f = df_motores[df_motores['status'] != 'deletado']
     if busca:
         df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
+    if df_f.empty:
+        st.warning("Nenhum motor encontrado.")
+    
     for idx, row in df_f.iterrows():
         area_ref = calcular_area_mm2(row['Fio_Principal'])
         
-        with st.expander(f"📦 {row['Marca']} | {row['Potencia_CV']} CV | {row['RPM']} RPM", expanded=False):
-            # Layout em Colunas para Dados Técnicos
+        # Cabeçalho do Expander limpo
+        label = f"📦 {row['Marca']} | {row['Potencia_CV']} CV | {row['RPM']} RPM"
+        with st.expander(label):
             col1, col2, col3 = st.columns([1, 1, 1.2])
             
             with col1:
-                st.markdown("### ⚡ Elétrica")
+                st.markdown("#### ⚡ Parte Elétrica")
                 st.write(f"**Fio Principal:** `{row['Fio_Principal']}`")
-                st.write(f"**Amperagem:** {row['Amperagem']} A")
-                st.write(f"**Voltagem:** {row['Voltagem']} V")
+                st.write(f"**Amperagem:** {row['Amperagem']}")
+                st.write(f"**Voltagem:** {row['Voltagem']}")
                 st.write(f"**Capacitor:** {row['Capacitor']}")
                 st.write(f"**Pólos:** {row['Polaridade']}")
 
             with col2:
-                st.markdown("### 🔧 Mecânica")
+                st.markdown("#### 🔧 Mecânica e Grupos")
                 st.write(f"**Rolamentos:** {row['Rolamentos']}")
-                st.write(f"**Eixo X:** {row['Eixo_X']} | **Y:** {row['Eixo_Y']}")
-                st.write(f"**Bobina P:** {row['Bobina_Principal']}")
-                st.write(f"**Bobina A:** {row['Bobina_Auxiliar']}")
+                st.write(f"**Eixos:** {row['Eixo_X']} / {row['Eixo_Y']}")
+                st.write(f"**Grupos P:** {row['Bobina_Principal']}")
+                st.write(f"**Grupos A:** {row['Bobina_Auxiliar']}")
 
             with col3:
-                st.markdown("### 🖼️ Ligação")
+                st.markdown("#### 🖼️ Esquema")
                 tipo = row['Tipo_Ligacao']
-                if tipo in df_fotos['nome_ligacao'].values:
+                if tipo and tipo in df_fotos['nome_ligacao'].values:
                     img_path = df_fotos[df_fotos['nome_ligacao'] == tipo]['caminho_arquivo'].values[0]
-                    st.image(img_path, caption=f"Esquema: {tipo}", use_container_width=True)
+                    st.image(img_path, use_container_width=True)
                 else:
-                    st.info("Sem esquema definido.")
+                    st.caption("Nenhum esquema vinculado.")
 
-            st.divider()
-            
-            # Botões de Ação
-            bt_c1, bt_c2, bt_c3 = st.columns(3)
-            if bt_c1.button("📊 CALCULAR ALTERAÇÃO", key=f"calc_{idx}"):
-                st.session_state[f"show_calc_{idx}"] = not st.session_state.get(f"show_calc_{idx}", False)
-            if bt_c2.button("📝 EDITAR MOTOR", key=f"edit_{idx}"):
-                st.session_state[f"show_edit_{idx}"] = not st.session_state.get(f"show_edit_{idx}", False)
-            if bt_c3.button("🗑️ DELETAR", key=f"del_{idx}"):
+            st.write("")
+            c_bt1, c_bt2, c_bt3 = st.columns(3)
+            if c_bt1.button("🔄 CALCULAR AWG", key=f"c_{idx}", use_container_width=True):
+                st.session_state[f"sc_{idx}"] = not st.session_state.get(f"sc_{idx}", False)
+            if c_bt2.button("📝 EDITAR", key=f"e_{idx}", use_container_width=True):
+                st.session_state[f"se_{idx}"] = not st.session_state.get(f"se_{idx}", False)
+            if c_bt3.button("🗑️ EXCLUIR", key=f"d_{idx}", use_container_width=True):
                 df_motores.at[idx, 'status'] = 'deletado'
                 salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
 
-            # Área de Cálculo (Estilizada conforme sua imagem)
-            if st.session_state.get(f"show_calc_{idx}"):
-                st.markdown("#### 🛠️ Sugestões AWG para Rebobinagem")
+            # Cálculo Intuitivo (Estilo sua imagem)
+            if st.session_state.get(f"sc_{idx}"):
+                st.markdown("---")
+                st.subheader("🛠️ Simulação de Bitolas")
                 sugest = gerar_sugestoes(area_ref)
+                if not sugest: st.info("Insira um Fio Principal válido para calcular.")
                 for s in sugest[:6]:
                     st.markdown(f"""
-                        <div style="background-color: white; padding: 10px; border-radius: 5px; border-left: 10px solid {s['cor']}; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: black; font-weight: bold; font-size: 16px;">{s['fio']}</span>
-                            <span style="color: #333;">({s['diff']:.2f}%) - <b>{s['status']}</b></span>
+                        <div class="calc-card" style="border-left: 10px solid {s['cor']};">
+                            <div style="display: flex; justify-content: space-between;">
+                                <b>{s['fio']}</b>
+                                <span>{s['diff']:.2f}% | <b>{s['status']}</b></span>
+                            </div>
                         </div>
                     """, unsafe_allow_html=True)
             
-            # Formulário de Edição
-            if st.session_state.get(f"show_edit_{idx}"):
-                with st.form(f"edit_form_{idx}"):
-                    st.write("### Editar Cadastro")
-                    e_fio = st.text_input("Fio Principal", value=row['Fio_Principal'])
-                    e_lig = st.selectbox("Esquema", lista_ligacoes, index=lista_ligacoes.index(row['Tipo_Ligacao']) if row['Tipo_Ligacao'] in lista_ligacoes else 0)
-                    e_rol = st.text_input("Rolamentos", value=row['Rolamentos'])
-                    if st.form_submit_button("✅ SALVAR ALTERAÇÕES"):
-                        df_motores.at[idx, 'Fio_Principal'] = e_fio
-                        df_motores.at[idx, 'Tipo_Ligacao'] = e_lig
-                        df_motores.at[idx, 'Rolamentos'] = e_rol
+            # Edição
+            if st.session_state.get(f"se_{idx}"):
+                st.markdown("---")
+                with st.form(f"form_ed_{idx}"):
+                    st.write("### ✏️ Editar Motor")
+                    col_ed1, col_ed2 = st.columns(2)
+                    with col_ed1:
+                        ed_m = st.text_input("Marca", value=row['Marca'])
+                        ed_cv = st.text_input("CV", value=row['Potencia_CV'])
+                        ed_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
+                    with col_ed2:
+                        ed_lig = st.selectbox("Esquema", lista_ligacoes, index=lista_ligacoes.index(row['Tipo_Ligacao']) if row['Tipo_Ligacao'] in lista_ligacoes else 0)
+                        ed_rol = st.text_input("Rolamentos", value=row['Rolamentos'])
+                    if st.form_submit_button("✅ SALVAR"):
+                        df_motores.loc[idx, ['Marca', 'Potencia_CV', 'Fio_Principal', 'Tipo_Ligacao', 'Rolamentos']] = [ed_m, ed_cv, ed_fp, ed_lig, ed_rol]
                         salvar_dados(df_motores, ARQUIVO_CSV)
-                        st.session_state[f"show_edit_{idx}"] = False; st.rerun()
+                        st.session_state[f"se_{idx}"] = False; st.rerun()
 
-# --- ABA NOVO MOTOR (FORMULÁRIO COMPLETO) ---
+# --- ABA NOVO MOTOR ---
 elif menu == "➕ NOVO MOTOR":
-    st.title("➕ Cadastrar Novo Motor")
-    with st.form("novo_motor"):
+    st.header("➕ Cadastro de Novo Motor")
+    with st.form("add_motor"):
         c1, c2, c3 = st.columns(3)
         with c1:
             m = st.text_input("Marca"); cv = st.text_input("CV"); r = st.text_input("RPM")
@@ -177,33 +200,46 @@ elif menu == "➕ NOVO MOTOR":
         with c2:
             fp = st.text_input("Fio Principal"); gp = st.text_input("Grupo Principal")
             fa = st.text_input("Fio Auxiliar"); ga = st.text_input("Grupo Auxiliar")
-            lig = st.selectbox("Esquema de Ligação", lista_ligacoes)
+            lig = st.selectbox("Ligação", lista_ligacoes)
         with c3:
             rol = st.text_input("Rolamentos"); ex = st.text_input("Eixo X"); ey = st.text_input("Eixo Y"); cap = st.text_input("Capacitor")
         
-        if st.form_submit_button("💾 SALVAR MOTOR NO BANCO"):
+        if st.form_submit_button("💾 SALVAR DADOS"):
             novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Amperagem': a, 'Polaridade': pol,
                     'Fio_Principal': fp, 'Bobina_Principal': gp, 'Fio_Auxiliar': fa, 'Bobina_Auxiliar': ga,
                     'Tipo_Ligacao': lig, 'Rolamentos': rol, 'Eixo_X': ex, 'Eixo_Y': ey, 'Capacitor': cap, 'status': 'ativo'}
             df_motores = pd.concat([df_motores, pd.DataFrame([novo])], ignore_index=True)
-            salvar_dados(df_motores, ARQUIVO_CSV); st.success("Motor cadastrado!"); st.rerun()
+            salvar_dados(df_motores, ARQUIVO_CSV); st.success("Cadastrado!"); st.rerun()
 
-# --- ABA BIBLIOTECA (UPLOADS) ---
+# --- ABA BIBLIOTECA ---
 elif menu == "🖼️ BIBLIOTECA":
-    st.title("🖼️ Biblioteca de Esquemas")
-    with st.form("add_foto"):
-        n = st.text_input("Nome da Ligação (ex: Série)"); f = st.file_uploader("Foto", type=['png','jpg','jpeg'])
-        if st.form_submit_button("Adicionar"):
+    st.header("🖼️ Biblioteca de Esquemas")
+    with st.form("lib"):
+        n = st.text_input("Nome (ex: Série)"); f = st.file_uploader("Foto", type=['png','jpg','jpeg'])
+        if st.form_submit_button("Subir Foto"):
             if n and f:
                 path = os.path.join(PASTA_UPLOADS, f.name)
-                with open(path, "wb") as file: file.write(f.getbuffer())
-                df_fotos = pd.concat([df_fotos, pd.DataFrame([{'nome_ligacao': n, 'caminho_arquivo': path}])], ignore_index=True)
+                with open(path, "wb") as fi: fi.write(f.getbuffer())
+                df_f_new = pd.DataFrame([{'nome_ligacao': n, 'caminho_arquivo': path}])
+                df_fotos = pd.concat([df_fotos, df_f_new], ignore_index=True)
                 salvar_dados(df_fotos, ARQUIVO_FOTOS); st.rerun()
+    
+    st.divider()
+    cols = st.columns(4)
     for i, r in df_fotos.iterrows():
-        st.image(r['caminho_arquivo'], caption=r['nome_ligacao'], width=200)
+        with cols[i % 4]:
+            st.image(r['caminho_arquivo'], use_container_width=True)
+            st.caption(r['nome_ligacao'])
+            if st.button("Remover", key=f"rm_{i}"):
+                df_fotos = df_fotos.drop(i); salvar_dados(df_fotos, ARQUIVO_FOTOS); st.rerun()
 
+# --- ABA LIXEIRA ---
 elif menu == "🗑️ LIXEIRA":
-    st.title("🗑️ Lixeira")
-    for i, r in df_motores[df_motores['status'] == 'deletado'].iterrows():
-        if st.button(f"Restaurar {r['Marca']} - {r['Potencia_CV']} CV"):
+    st.header("🗑️ Lixeira")
+    deletados = df_motores[df_motores['status'] == 'deletado']
+    if deletados.empty: st.info("Lixeira vazia.")
+    for i, r in deletados.iterrows():
+        col_l1, col_l2 = st.columns([3, 1])
+        col_l1.write(f"Motor: {r['Marca']} {r['Potencia_CV']} CV")
+        if col_l2.button("Restaurar", key=f"res_{i}"):
             df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
