@@ -1,10 +1,3 @@
-O erro ocorreu porque você copiou a minha explicação em texto para dentro do arquivo .py. O Python tenta ler as minhas frases iniciais como se fossem comandos de programação, o que causa o SyntaxError.
-
-No seu arquivo Python, deve conter apenas o código, começando pela linha do import streamlit.
-
-Aqui está o código limpo e corrigido para você copiar e substituir todo o conteúdo do seu arquivo meusite.py:
-
-Python
 import streamlit as st
 import pandas as pd
 import os
@@ -162,3 +155,4 @@ with tab3:
                 st.caption(foto_nome)
 
 st.markdown("<br><p style='text-align:center; color:#888;'>Pablo Motores © 2026</p>", unsafe_allow_html=True)
+
