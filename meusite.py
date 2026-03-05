@@ -1,501 +1,285 @@
 import streamlit as st
 import pandas as pd
+import math
 import os
-from datetime import datetime
 
-# ---------------- CONFIG ----------------
+st.set_page_config(page_title="Sistema de Rebobinagem", layout="wide")
 
 ARQUIVO_MOTORES = "motores.csv"
-ARQUIVO_CLIENTES = "clientes.csv"
-ARQUIVO_OS = "ordens_servico.csv"
-ARQUIVO_FOTOS = "biblioteca_ligacoes.csv"
 
-PASTA_UPLOADS = "uploads"
+SENHA_MESTRE = "1234"
 
-TOKEN_PRO = "PABLO123"
-TOKEN_MESTRE = "MESTRE99"
-
-if not os.path.exists(PASTA_UPLOADS):
-    os.makedirs(PASTA_UPLOADS)
-
-# ---------------- FUNÇÕES ----------------
-
-def carregar(arq, colunas):
-    if not os.path.exists(arq):
-        return pd.DataFrame(columns=colunas)
-    df = pd.read_csv(arq, sep=";", dtype=str).fillna("")
-    for c in colunas:
-        if c not in df.columns:
-            df[c] = ""
-    return df
-
-def salvar(df, arq):
-    df.to_csv(arq, index=False, sep=";")
-
-# ---------------- COLUNAS ----------------
-
-COL_MOTORES = [
-
-"Marca",
-"Modelo",
-
-"Potencia_CV",
-"Potencia_W",
-
-"RPM",
-"Frequencia",
-
-"Voltagem",
-"Amperagem",
-
-"Numero_Polos",
-"Tipo_Motor",
-
-"Bobina_Principal",
-"Fio_Principal",
-"Passo_P",
-
-"Bobina_Auxiliar",
-"Fio_Auxiliar",
-"Passo_A",
-
-"Numero_Ranhuras",
-"Passo_Ranhura",
-
-"Tipo_Enrolamento",
-
-"Tipo_Ligacao",
-"Ligacao_Interna",
-
-"Capacitor",
-"Capacitor_Partida",
-"Capacitor_Permanente",
-
-"Rolamentos",
-"Selo_Mecanico",
-
-"Eixo_X",
-"Eixo_Y",
-
-"Sentido_Rotacao",
-
-"Classe_Isolacao",
-"Temperatura_Max",
-
-"Obs",
-
-"status"
+COLUNAS = [
+"modelo",
+"fabricante",
+"potencia_cv",
+"tensao",
+"corrente",
+"rpm",
+"frequencia",
+"polos",
+"ranhuras",
+"bobinas",
+"espiras",
+"fio_mm",
+"ligacao",
+"observacoes"
 ]
 
-COL_CLIENTES = [
-"nome",
-"telefone",
-"cidade",
-"email",
-"data"
-]
-
-COL_OS = [
-"numero",
-"cliente",
-"telefone",
-"motor",
-"problema",
-"valor",
-"status",
-"data"
-]
-
-COL_FOTOS = [
-"nome_ligacao",
-"caminho"
-]
-
-# ---------------- CARREGAR BANCOS ----------------
-
-df_motores = carregar(ARQUIVO_MOTORES, COL_MOTORES)
-df_clientes = carregar(ARQUIVO_CLIENTES, COL_CLIENTES)
-df_os = carregar(ARQUIVO_OS, COL_OS)
-df_fotos = carregar(ARQUIVO_FOTOS, COL_FOTOS)
-
-# ---------------- MOTOR TESTE ----------------
-
-if df_motores.empty:
-
-    motor = {
-        "Marca":"WEG",
-        "Modelo":"W22",
-
-        "Potencia_CV":"1",
-        "Potencia_W":"750",
-
-        "RPM":"3450",
-        "Frequencia":"60Hz",
-
-        "Voltagem":"127/220",
-        "Amperagem":"6.8",
-
-        "Numero_Polos":"2",
-        "Tipo_Motor":"Monofásico",
-
-        "Bobina_Principal":"120",
-        "Fio_Principal":"18 AWG",
-        "Passo_P":"1-6",
-
-        "Bobina_Auxiliar":"90",
-        "Fio_Auxiliar":"20 AWG",
-        "Passo_A":"1-5",
-
-        "Numero_Ranhuras":"24",
-        "Passo_Ranhura":"1-6",
-
-        "Tipo_Enrolamento":"Concêntrico",
-
-        "Tipo_Ligacao":"Paralelo",
-        "Ligacao_Interna":"U1 U2 Z1 Z2",
-
-        "Capacitor":"25uF",
-        "Capacitor_Partida":"80uF",
-        "Capacitor_Permanente":"25uF",
-
-        "Rolamentos":"6203 / 6202",
-        "Selo_Mecanico":"12mm",
-
-        "Eixo_X":"15",
-        "Eixo_Y":"40",
-
-        "Sentido_Rotacao":"Horário",
-
-        "Classe_Isolacao":"F",
-        "Temperatura_Max":"155°C",
-
-        "Obs":"Motor teste sistema",
-
-        "status":"ativo"
-    }
-
-    df_motores = pd.concat([df_motores,pd.DataFrame([motor])],ignore_index=True)
-
-    salvar(df_motores,ARQUIVO_MOTORES)
-
-# ---------------- LOGIN ----------------
-
-if "logado" not in st.session_state:
-
-    st.session_state["logado"] = False
-    st.session_state["perfil"] = ""
-
-if not st.session_state["logado"]:
-
-    st.title("⚙ Sistema Pablo Motores")
-
-    tipo = st.selectbox(
-        "Entrar como",
-        ["Cliente","Profissional","Mestre"]
-    )
-
-    if tipo == "Cliente":
-
-        if st.button("Entrar"):
-
-            st.session_state["logado"] = True
-            st.session_state["perfil"] = "cliente"
-            st.rerun()
-
+def carregar():
+    if os.path.exists(ARQUIVO_MOTORES):
+        return pd.read_csv(ARQUIVO_MOTORES)
     else:
+        df = pd.DataFrame(columns=COLUNAS)
 
-        token = st.text_input("Token", type="password")
+        exemplo = {
+        "modelo":"WEG W22",
+        "fabricante":"WEG",
+        "potencia_cv":5,
+        "tensao":220,
+        "corrente":14.2,
+        "rpm":1750,
+        "frequencia":60,
+        "polos":4,
+        "ranhuras":36,
+        "bobinas":12,
+        "espiras":40,
+        "fio_mm":1.25,
+        "ligacao":"Delta",
+        "observacoes":"Motor exemplo para testes"
+        }
 
-        if st.button("Entrar"):
+        df.loc[len(df)] = exemplo
+        df.to_csv(ARQUIVO_MOTORES,index=False)
 
-            if tipo == "Profissional" and token == TOKEN_PRO:
+        return df
 
-                st.session_state["logado"] = True
-                st.session_state["perfil"] = "pro"
-                st.rerun()
+def salvar(df):
+    df.to_csv(ARQUIVO_MOTORES,index=False)
 
-            elif tipo == "Mestre" and token == TOKEN_MESTRE:
+df = carregar()
 
-                st.session_state["logado"] = True
-                st.session_state["perfil"] = "mestre"
-                st.rerun()
+menu = st.sidebar.selectbox(
+"Menu",
+[
+"Dashboard",
+"Consultar motor",
+"Cadastrar motor",
+"Simulador de rebobinagem",
+"Modo mestre"
+]
+)
 
-            else:
+def calcular_comprimento(espiras,bobinas,ranhuras):
+    perimetro = ranhuras * 0.02
+    return espiras * bobinas * perimetro
 
-                st.error("Token incorreto")
+def calcular_peso(fio,comprimento):
 
-    st.stop()
+    area = math.pi*(fio/2)**2
+    volume = area * comprimento
+    peso = volume * 8.96
+    return peso
 
-# ---------------- MENU ----------------
+if menu == "Dashboard":
 
-st.set_page_config(layout="wide")
+    st.title("Painel do Sistema")
 
-with st.sidebar:
+    c1,c2,c3 = st.columns(3)
 
-    st.title("Menu")
+    c1.metric("Motores cadastrados",len(df))
 
-    if st.button("Sair"):
-        st.session_state["logado"] = False
-        st.rerun()
+    if len(df)>0:
+        c2.metric("Potência média CV",round(df["potencia_cv"].mean(),2))
+        c3.metric("RPM médio",round(df["rpm"].mean(),0))
 
-    menu = st.radio(
+    st.dataframe(df)
 
-        "Opções",
+if menu == "Consultar motor":
 
-        [
-        "Consulta Motores",
-        "Cadastrar Motor",
-        "Clientes",
-        "Ordem de Serviço",
-        "Biblioteca de Ligações"
-        ]
+    st.title("Consulta de motores")
 
-    )
+    busca = st.text_input("Buscar modelo")
 
-# ---------------- CONSULTA ----------------
+    resultado = df[df["modelo"].str.contains(busca,case=False,na=False)]
 
-if menu == "Consulta Motores":
+    st.dataframe(resultado)
 
-    st.title("Consulta de Motores")
+    if len(resultado)>0:
 
-    busca = st.text_input("Buscar motor")
+        motor = resultado.iloc[0]
 
-    df = df_motores[df_motores["status"]!="deletado"]
+        st.subheader("Dados técnicos")
 
-    if busca:
+        col1,col2,col3 = st.columns(3)
 
-        df = df[df.apply(
+        col1.write("Potência CV:",motor["potencia_cv"])
+        col1.write("Tensão:",motor["tensao"])
+        col1.write("Corrente:",motor["corrente"])
 
-            lambda r: r.astype(str).str.contains(busca,case=False).any(),
+        col2.write("RPM:",motor["rpm"])
+        col2.write("Frequência:",motor["frequencia"])
+        col2.write("Polos:",motor["polos"])
 
-            axis=1
+        col3.write("Ranhuras:",motor["ranhuras"])
+        col3.write("Bobinas:",motor["bobinas"])
+        col3.write("Espiras:",motor["espiras"])
 
-        )]
+        comprimento = calcular_comprimento(
+        motor["espiras"],
+        motor["bobinas"],
+        motor["ranhuras"]
+        )
 
-    for i,r in df.iterrows():
+        peso = calcular_peso(
+        motor["fio_mm"],
+        comprimento
+        )
 
-        with st.expander(f"{r['Marca']} {r['Modelo']} | {r['Potencia_CV']}CV"):
+        st.subheader("Cálculos estimados")
 
-            c1,c2,c3 = st.columns(3)
+        st.write("Comprimento fio (m):",round(comprimento,2))
+        st.write("Peso cobre (g):",round(peso,2))
 
-            with c1:
+if menu == "Cadastrar motor":
 
-                st.write("Voltagem:",r["Voltagem"])
-                st.write("Amperagem:",r["Amperagem"])
-                st.write("RPM:",r["RPM"])
-                st.write("Polos:",r["Numero_Polos"])
+    st.title("Cadastro de motor")
 
-            with c2:
+    with st.form("cadastro"):
 
-                st.write("Fio P:",r["Fio_Principal"])
-                st.write("Espiras P:",r["Bobina_Principal"])
-                st.write("Passo P:",r["Passo_P"])
-
-                st.write("Fio A:",r["Fio_Auxiliar"])
-                st.write("Espiras A:",r["Bobina_Auxiliar"])
-
-            with c3:
-
-                st.write("Rolamentos:",r["Rolamentos"])
-                st.write("Capacitor:",r["Capacitor"])
-                st.write("Classe isolação:",r["Classe_Isolacao"])
-                st.write("Temperatura:",r["Temperatura_Max"])
-
-            st.write("Observações:",r["Obs"])
-
-# ---------------- CADASTRO MOTOR ----------------
-
-elif menu == "Cadastrar Motor":
-
-    st.title("Cadastro Motor")
-
-    with st.form("motor"):
+        modelo = st.text_input("Modelo")
+        fabricante = st.text_input("Fabricante")
 
         c1,c2,c3 = st.columns(3)
 
-        marca = c1.text_input("Marca")
-        modelo = c1.text_input("Modelo")
+        potencia = c1.number_input("Potência CV",0.0)
+        tensao = c1.number_input("Tensão",0)
 
-        cv = c1.text_input("Potência CV")
-        w = c1.text_input("Potência W")
+        corrente = c2.number_input("Corrente",0.0)
+        rpm = c2.number_input("RPM",0)
 
-        rpm = c2.text_input("RPM")
-        freq = c2.text_input("Frequência")
+        frequencia = c3.number_input("Frequência",60)
+        polos = c3.number_input("Polos",4)
 
-        vol = c2.text_input("Voltagem")
-        amp = c2.text_input("Amperagem")
+        ranhuras = st.number_input("Ranhuras",0)
+        bobinas = st.number_input("Bobinas",0)
+        espiras = st.number_input("Espiras",0)
 
-        polos = c3.text_input("Número Polos")
+        fio = st.number_input("Bitola fio mm",0.0)
 
-        fio = c1.text_input("Fio principal")
-        esp = c1.text_input("Espiras principal")
-        passo = c1.text_input("Passo principal")
-
-        rol = c2.text_input("Rolamentos")
-        selo = c2.text_input("Selo mecânico")
-
-        capacitor = c3.text_input("Capacitor")
+        ligacao = st.selectbox("Ligação",["Estrela","Delta"])
 
         obs = st.text_area("Observações")
 
-        if st.form_submit_button("Salvar"):
+        enviar = st.form_submit_button("Salvar")
+
+        if enviar:
 
             novo = {
-
-            "Marca":marca,
-            "Modelo":modelo,
-
-            "Potencia_CV":cv,
-            "Potencia_W":w,
-
-            "RPM":rpm,
-            "Frequencia":freq,
-
-            "Voltagem":vol,
-            "Amperagem":amp,
-
-            "Numero_Polos":polos,
-
-            "Fio_Principal":fio,
-            "Bobina_Principal":esp,
-            "Passo_P":passo,
-
-            "Rolamentos":rol,
-            "Selo_Mecanico":selo,
-
-            "Capacitor":capacitor,
-
-            "Obs":obs,
-
-            "status":"ativo"
+            "modelo":modelo,
+            "fabricante":fabricante,
+            "potencia_cv":potencia,
+            "tensao":tensao,
+            "corrente":corrente,
+            "rpm":rpm,
+            "frequencia":frequencia,
+            "polos":polos,
+            "ranhuras":ranhuras,
+            "bobinas":bobinas,
+            "espiras":espiras,
+            "fio_mm":fio,
+            "ligacao":ligacao,
+            "observacoes":obs
             }
 
-            df_motores = pd.concat([df_motores,pd.DataFrame([novo])],ignore_index=True)
+            df.loc[len(df)] = novo
 
-            salvar(df_motores,ARQUIVO_MOTORES)
+            salvar(df)
 
             st.success("Motor cadastrado")
 
-# ---------------- CLIENTES ----------------
+if menu == "Simulador de rebobinagem":
 
-elif menu == "Clientes":
+    st.title("Simulador de alteração")
 
-    st.title("Cadastro Clientes")
+    modelo = st.selectbox("Motor base",df["modelo"])
 
-    with st.form("cliente"):
+    motor = df[df["modelo"]==modelo].iloc[0]
 
-        c1,c2 = st.columns(2)
+    espiras = st.number_input(
+    "Espiras",
+    value=int(motor["espiras"])
+    )
 
-        nome = c1.text_input("Nome")
-        telefone = c1.text_input("Telefone")
+    fio = st.number_input(
+    "Fio mm",
+    value=float(motor["fio_mm"])
+    )
 
-        cidade = c2.text_input("Cidade")
-        email = c2.text_input("Email")
+    bobinas = st.number_input(
+    "Bobinas",
+    value=int(motor["bobinas"])
+    )
 
-        if st.form_submit_button("Cadastrar"):
+    comprimento = calcular_comprimento(
+    espiras,
+    bobinas,
+    motor["ranhuras"]
+    )
 
-            novo = {
+    peso = calcular_peso(
+    fio,
+    comprimento
+    )
 
-            "nome":nome,
-            "telefone":telefone,
-            "cidade":cidade,
-            "email":email,
-            "data":datetime.now().strftime("%d/%m/%Y")
+    st.subheader("Resultado da simulação")
 
-            }
+    st.write("Comprimento fio:",round(comprimento,2))
+    st.write("Peso cobre:",round(peso,2))
 
-            df_clientes = pd.concat([df_clientes,pd.DataFrame([novo])],ignore_index=True)
+    st.info("Simulação não salva no banco")
 
-            salvar(df_clientes,ARQUIVO_CLIENTES)
+if menu == "Modo mestre":
 
-            st.success("Cliente cadastrado")
+    st.title("Modo mestre")
 
-    st.dataframe(df_clientes)
+    senha = st.text_input("Senha",type="password")
 
-# ---------------- ORDEM SERVIÇO ----------------
+    if senha == SENHA_MESTRE:
 
-elif menu == "Ordem de Serviço":
+        st.success("Acesso liberado")
 
-    st.title("Ordem de Serviço")
+        motor = st.selectbox("Motor",df["modelo"])
 
-    with st.form("os"):
+        indice = df[df["modelo"]==motor].index[0]
 
-        cliente = st.selectbox(
-
-            "Cliente",
-
-            df_clientes["nome"] if not df_clientes.empty else []
-
+        novo_modelo = st.text_input(
+        "Modelo",
+        df.loc[indice,"modelo"]
         )
 
-        telefone = st.text_input("Telefone")
+        nova_pot = st.number_input(
+        "Potência",
+        value=float(df.loc[indice,"potencia_cv"])
+        )
 
-        motor = st.text_input("Motor")
+        if st.button("Salvar edição"):
 
-        problema = st.text_area("Problema")
+            df.loc[indice,"modelo"] = novo_modelo
+            df.loc[indice,"potencia_cv"] = nova_pot
 
-        valor = st.text_input("Valor")
+            salvar(df)
 
-        if st.form_submit_button("Abrir OS"):
+            st.success("Editado")
 
-            numero = str(len(df_os)+1)
+        if st.button("Excluir motor"):
 
-            nova = {
+            df.drop(indice,inplace=True)
 
-            "numero":numero,
-            "cliente":cliente,
-            "telefone":telefone,
-            "motor":motor,
-            "problema":problema,
-            "valor":valor,
-            "status":"aberta",
-            "data":datetime.now().strftime("%d/%m/%Y")
+            salvar(df)
 
-            }
+            st.success("Motor excluído")
 
-            df_os = pd.concat([df_os,pd.DataFrame([nova])],ignore_index=True)
-
-            salvar(df_os,ARQUIVO_OS)
-
-            st.success("OS criada")
-
-    st.dataframe(df_os)
-
-# ---------------- BIBLIOTECA ----------------
-
-elif menu == "Biblioteca de Ligações":
-
-    st.title("Biblioteca Esquemas")
-
-    with st.form("foto"):
-
-        nome = st.text_input("Nome ligação")
-
-        file = st.file_uploader("Imagem")
-
-        if st.form_submit_button("Enviar"):
-
-            if file:
-
-                path = os.path.join(PASTA_UPLOADS,file.name)
-
-                with open(path,"wb") as f:
-
-                    f.write(file.getbuffer())
-
-                novo = {
-
-                "nome_ligacao":nome,
-                "caminho":path
-
-                }
-
-                df_fotos = pd.concat([df_fotos,pd.DataFrame([novo])],ignore_index=True)
-
-                salvar(df_fotos,ARQUIVO_FOTOS)
-
-                st.success("Imagem salva")
-
-    for i,r in df_fotos.iterrows():
-
-        st.image(r["caminho"],caption=r["nome_ligacao"])
+    else:
+        st.warning("Acesso restrito")
+        
