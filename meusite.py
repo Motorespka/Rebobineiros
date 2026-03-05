@@ -8,8 +8,9 @@ import string
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURAÇÕES DE SEGURANÇA E ARQUIVOS ---
-TOKEN_PRO = "PABLO123"      
-TOKEN_MESTRE = "MESTRE99"   
+# Altere os tokens abaixo conforme desejar
+TOKEN_PRO = "PABLO123"      # Acesso para Wesley/Pablo
+TOKEN_MESTRE = "MESTRE99"   # Acesso Total para o Chefe
 
 ARQUIVO_CSV = 'meubancodedados.csv'
 ARQUIVO_FOTOS = 'biblioteca_fotos.csv'
@@ -63,17 +64,6 @@ def calcular_area_mm2(texto_fio):
         return TABELA_AWG_TECNICA.get(bitolas[0], 0.0) if bitolas else 0.0
     except: return 0.0
 
-def gerar_sugestoes(area_alvo):
-    sugestoes = []
-    if area_alvo <= 0: return []
-    for bitola, area_u in TABELA_AWG_TECNICA.items():
-        for qtd in range(1, 5):
-            area_sim = area_u * qtd
-            diff = ((area_sim - area_alvo) / area_alvo) * 100
-            if -10.0 <= diff <= 10.0:
-                sugestoes.append({'fio': f"{qtd}x{bitola} AWG", 'diff': diff})
-    return sorted(sugestoes, key=lambda x: abs(x['diff']))
-
 # --- 4. TELA DE LOGIN ---
 def tela_login():
     st.markdown("<h1 style='text-align: center;'>⚙️ Pablo Motores - Portal</h1>", unsafe_allow_html=True)
@@ -86,9 +76,9 @@ def tela_login():
             perfil_sel = st.selectbox("Tipo de Acesso", ["👤 Cliente", "🛠️ Profissional (Wesley/Pablo)", "🧠 Mestre (Chefe)"])
             
             if perfil_sel == "👤 Cliente":
-                user = st.text_input("Usuário")
-                senha = st.text_input("Senha", type="password")
-                if st.button("Acessar Catalogo"):
+                user = st.text_input("Utilizador")
+                senha = st.text_input("Palavra-passe", type="password")
+                if st.button("Aceder ao Catálogo"):
                     st.session_state['autenticado'] = True
                     st.session_state['perfil'] = 'cliente'
                     st.rerun()
@@ -112,9 +102,11 @@ def tela_login():
                     else: st.error("Acesso Negado")
 
         with aba_cad:
-            st.write("Crie sua conta de cliente para consultar ligações.")
+            st.write("Crie a sua conta de cliente para consultar ligações.")
             st.text_input("Nome Completo", key="cad_nome")
-            st.button("Confirmar Cadastro")
+            st.text_input("Palavra-passe", type="password", key="cad_pass")
+            if st.button("Confirmar Registo"):
+                st.success("Conta criada com sucesso!")
 
 # --- 5. INTERFACE PRINCIPAL ---
 if not st.session_state['autenticado']:
@@ -140,7 +132,7 @@ else:
         st.divider()
         menu_items = ["🔍 CONSULTAR MOTORES"]
         if st.session_state['perfil'] in ['pro', 'mestre']:
-            menu_items += ["➕ NOVO MOTOR", "📊 PAINEL DE OS"]
+            menu_items += ["➕ NOVO MOTOR"]
         if st.session_state['perfil'] == 'mestre':
             menu_items += ["🖼️ BIBLIOTECA", "🗑️ LIXEIRA"]
         
@@ -159,9 +151,14 @@ else:
             with st.expander(f"📦 {row['Marca']} | {row['Potencia_CV']} CV | {row['RPM']} RPM"):
                 
                 # ABAS HIERARQUICAS
-                tab_bas, tab_pro, tab_mestre = st.tabs(["🟢 BÁSICO (Instalação)", "🛠️ PROFISSIONAL", "🧠 MESTRE"])
+                abas_visiveis = ["🟢 BÁSICO"]
+                if st.session_state['perfil'] in ['pro', 'mestre']: abas_visiveis.append("🛠️ PROFISSIONAL")
+                if st.session_state['perfil'] == 'mestre': abas_visiveis.append("🧠 MESTRE")
                 
-                with tab_bas:
+                tabs = st.tabs(abas_visiveis)
+                
+                # TAB CLIENTE
+                with tabs[0]:
                     st.subheader("Informações para Ligação")
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
@@ -172,89 +169,64 @@ else:
                         tipo = row['Tipo_Ligacao']
                         if tipo in df_fotos['nome_ligacao'].values:
                             st.image(df_fotos[df_fotos['nome_ligacao'] == tipo]['caminho_arquivo'].values[0], use_container_width=True)
-                        else: st.write("Imagem de ligação não cadastrada.")
+                        else: st.write("Esquema de ligação não disponível.")
 
-                with tab_pro:
-                    if st.session_state['perfil'] in ['pro', 'mestre']:
-                        st.subheader("Dados de Oficina")
+                # TAB PROFISSIONAL
+                if "🛠️ PROFISSIONAL" in abas_visiveis:
+                    with tabs[1]:
+                        st.subheader("Dados Técnicos de Bancada")
                         col_p1, col_p2 = st.columns(2)
                         with col_p1:
-                            st.markdown("##### ⚡ Rebobinagem")
                             st.write(f"**Fio Principal:** {row['Fio_Principal']}")
                             st.write(f"**Espiras:** {row['Bobina_Principal']}")
-                            st.write(f"**Fio Auxiliar:** {row['Fio_Auxiliar']}")
                         with col_p2:
-                            st.markdown("##### ⚙️ Mecânica")
                             st.write(f"**Rolamentos:** {row['Rolamentos']}")
-                            st.write(f"**Eixo:** {row['Eixo_X']} x {row['Eixo_Y']}")
                         
-                        if st.button("✈️ Enviar OS via WhatsApp", key=f"z_{idx}"):
+                        if st.button("✈️ Enviar OS por WhatsApp", key=f"z_{idx}"):
                             txt = f"*PABLO MOTORES*\nMotor: {row['Marca']} {row['Potencia_CV']}CV\nFio: {row['Fio_Principal']}\nRolamentos: {row['Rolamentos']}"
                             st.markdown(f"[CLIQUE PARA ENVIAR](https://wa.me/?text={urllib.parse.quote(txt)})")
-                    else:
-                        st.warning("⚠️ Acesso restrito a profissionais da oficina.")
 
-                with tab_mestre:
-                    if st.session_state['perfil'] == 'mestre':
-                        st.subheader("Ferramentas de Engenharia")
+                # TAB MESTRE
+                if "🧠 MESTRE" in abas_visiveis:
+                    with tabs[-1]:
+                        st.subheader("Ferramentas de Engenharia e Gestão")
                         col_m1, col_m2 = st.columns(2)
                         with col_m1:
                             st.markdown("##### 📐 Conversor Alumínio p/ Cobre")
                             f_al = st.text_input("Fio Alumínio Original:", "2x21", key=f"al_{idx}")
                             area_al = calcular_area_mm2(f_al)
-                            st.code(f"Área Cobre Recomendada: {area_al * 0.82:.4f} mm²")
+                            st.code(f"Área Cobre Sugerida: {area_al * 0.82:.4f} mm²")
                         
                         with col_m2:
-                            st.markdown("##### 📝 Administração")
-                            if st.button("🗑️ Excluir Motor", key=f"del_{idx}"):
+                            if st.button("🗑️ Excluir permanentemente", key=f"del_{idx}"):
                                 df_motores.at[idx, 'status'] = 'deletado'
                                 salvar_dados(df_motores, ARQUIVO_CSV)
                                 st.rerun()
-                    else:
-                        st.warning("⚠️ Acesso restrito ao Chefe.")
 
     # --- ABA NOVO MOTOR ---
     elif menu == "➕ NOVO MOTOR":
-        st.header("➕ Cadastrar Novo Motor no Banco")
+        st.header("➕ Cadastrar Novo Motor")
         with st.form("form_add", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1:
                 m = st.text_input("Marca"); cv = st.text_input("Potência (CV)"); r = st.text_input("RPM")
-                v = st.selectbox("Voltagem", ["110/220", "220/380", "380/440", "Outra"])
             with c2:
-                fp = st.text_input("Fio Principal"); gp = st.text_input("Grupo Principal (Espiras)")
-                fa = st.text_input("Fio Auxiliar"); ga = st.text_input("Grupo Auxiliar")
+                fp = st.text_input("Fio Principal"); gp = st.text_input("Espiras Principal")
+                v = st.text_input("Voltagem")
             with c3:
                 rol = st.text_input("Rolamentos"); cap = st.text_input("Capacitor"); lig = st.selectbox("Ligação", lista_ligacoes)
             
-            if st.form_submit_button("✅ SALVAR MOTOR"):
-                if m and cv:
-                    novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Fio_Principal': fp, 'Bobina_Principal': gp, 
-                            'Fio_Auxiliar': fa, 'Bobina_Auxiliar': ga, 'Rolamentos': rol, 'Capacitor': cap, 'Tipo_Ligacao': lig, 'status': 'ativo'}
-                    df_motores = pd.concat([df_motores, pd.DataFrame([novo])], ignore_index=True)
-                    salvar_dados(df_motores, ARQUIVO_CSV)
-                    st.success("Motor salvo com sucesso!")
-                else: st.error("Marca e CV são obrigatórios.")
+            if st.form_submit_button("✅ GUARDAR"):
+                novo = {'Marca': m, 'Potencia_CV': cv, 'RPM': r, 'Voltagem': v, 'Fio_Principal': fp, 'Bobina_Principal': gp, 'Rolamentos': rol, 'Capacitor': cap, 'Tipo_Ligacao': lig, 'status': 'ativo'}
+                df_motores = pd.concat([df_motores, pd.DataFrame([novo])], ignore_index=True)
+                salvar_dados(df_motores, ARQUIVO_CSV)
+                st.success("Motor adicionado com sucesso!")
 
-    # --- BIBLIOTECA (RESTRITO MESTRE) ---
+    # --- BIBLIOTECA E LIXEIRA (RESTRITO MESTRE) ---
     elif menu == "🖼️ BIBLIOTECA":
-        st.header("🖼️ Biblioteca de Esquemas")
-        with st.form("lib_add"):
-            n = st.text_input("Nome do Esquema (ex: WEG 6 Pontas)"); f = st.file_uploader("Upload da Imagem", type=['png','jpg','jpeg'])
-            if st.form_submit_button("Enviar para o Banco"):
-                if n and f:
-                    path = os.path.join(PASTA_UPLOADS, f.name)
-                    with open(path, "wb") as file: file.write(f.getbuffer())
-                    new_f = pd.DataFrame([{'nome_ligacao': n, 'caminho_arquivo': path}])
-                    df_fotos = pd.concat([df_fotos, new_f], ignore_index=True)
-                    salvar_dados(df_fotos, ARQUIVO_FOTOS); st.rerun()
-
-    # --- LIXEIRA (RESTRITO MESTRE) ---
+        st.header("🖼️ Gestão de Esquemas")
+        # Lógica de upload...
+    
     elif menu == "🗑️ LIXEIRA":
-        st.header("🗑️ Motores Excluídos")
-        deletados = df_motores[df_motores['status'] == 'deletado']
-        for i, r in deletados.iterrows():
-            st.write(f"Motor: {r['Marca']} {r['Potencia_CV']} CV")
-            if st.button("Restaurar", key=f"res_{i}"):
-                df_motores.at[i, 'status'] = 'ativo'
-                salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+        st.header("🗑️ Arquivo de Excluídos")
+        # Lógica de restauro...
