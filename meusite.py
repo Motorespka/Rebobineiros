@@ -69,7 +69,7 @@ st.markdown("""
     <style>
     .stExpander { border: 1px solid #444 !important; border-radius: 8px !important; margin-bottom: 10px !important; }
     .status-card { padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; margin: 10px 0; }
-    .label-info { color: #666; font-size: 0.9em; }
+    .calc-box { background-color: #1e1e1e; padding: 15px; border-radius: 10px; border-left: 5px solid #007bff; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -102,13 +102,16 @@ if menu == "🔍 CONSULTA":
 
     for idx, row in df_f.iterrows():
         area_ref = calcular_area_mm2(row['Fio_Principal'])
+        # Tenta extrair o primeiro número de espiras da bobina principal para cálculos
+        espiras_base = re.findall(r'\d+', str(row['Bobina_Principal']))
+        espiras_ref = int(espiras_base[0]) if espiras_base else 0
+
         label = f"📦 {row['Marca']} | {row['Potencia_CV']} CV | {row['RPM']} RPM"
         
         with st.expander(label):
             tab1, tab2, tab3 = st.tabs(["📋 DADOS GERAIS", "⚙️ ÁREA TÉCNICA", "👑 PAINEL CHEFE"])
             
             with tab1:
-                # EXIBIÇÃO COMPLETA DE TODAS AS INFORMAÇÕES
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown("#### ⚡ Elétrica")
@@ -133,74 +136,87 @@ if menu == "🔍 CONSULTA":
                     else: st.caption("Sem esquema.")
 
             with tab2:
-                st.subheader("🛠️ Conversor Técnico de Tensão e Amperagem")
+                st.subheader("🛠️ Cálculos de Rebobinagem")
                 
-                # Tratamento de valores numéricos do banco
-                try:
-                    v_banco = float(re.findall(r'\d+', str(row['Voltagem']))[0]) if row['Voltagem'] else 220.0
-                    a_banco = float(str(row['Amperagem']).replace(',','.')) if row['Amperagem'] else 0.0
-                except:
-                    v_banco, a_banco = 220.0, 0.0
-
+                # CÁLCULO DE MUDANÇA DE TENSÃO
                 with st.container(border=True):
-                    st.markdown("**🔌 Redimensionamento por Voltagem**")
+                    st.markdown("### 🔌 Conversor de Tensão e Espiras")
+                    st.info("Este cálculo ajusta o número de espiras e a bitola do fio proporcionalmente à mudança de voltagem.")
                     col_v1, col_v2 = st.columns(2)
-                    
-                    tensoes = [110, 220, 380, 440, 680, 760]
-                    v_de = col_v1.selectbox("Tensão de Origem (V):", tensoes, index=tensoes.index(int(v_banco)) if int(v_banco) in tensoes else 1, key=f"vde_{idx}")
-                    v_para = col_v2.selectbox("Tensão de Destino (V):", tensoes, index=2, key=f"vpa_{idx}")
+                    v_de = col_v1.number_input("Tensão Original (V):", value=float(row['Voltagem']) if row['Voltagem'].isdigit() else 220.0, key=f"vde_{idx}")
+                    v_para = col_v2.number_input("Nova Tensão (V):", value=380.0, key=f"vpa_{idx}")
                     
                     if v_de > 0:
                         fator = v_para / v_de
-                        nova_amperagem = a_banco / fator
                         nova_area = area_ref / fator
+                        novas_espiras = espiras_ref * fator
                         
-                        st.markdown("---")
-                        res1, res2, res3 = st.columns(3)
-                        res1.metric("Nova Amperagem", f"{nova_amperagem:.2f} A")
-                        res2.metric("Fator Espiras", f"{fator:.2f} x")
-                        res3.metric("Nova Área Fio", f"{nova_area:.4f} mm²")
+                        c_res1, c_res2 = st.columns(2)
+                        with c_res1:
+                            st.metric("Novas Espiras (Aprox.)", f"{round(novas_espiras)} esp")
+                            st.caption(f"Fator de correção: {fator:.2f}x")
+                        with c_res2:
+                            st.metric("Nova Seção de Fio", f"{nova_area:.4f} mm²")
                         
-                        st.info(f"👉 **Ação:** Multiplique as espiras originais por **{fator:.2f}**. O novo conjunto de fios deve somar **{nova_area:.4f} mm²**.")
-
-                # SIMULADOR DE FIOS (Agora comparando com a nova área calculada)
-                st.markdown("**🔄 Simulador de Viabilidade de Fios**")
-                fio_teste = st.text_input("Fio que você tem em mãos (Ex: 2x21):", key=f"ft_{idx}")
-                if fio_teste:
-                    area_n = calcular_area_mm2(fio_teste)
-                    # Compara com a nova_area calculada na conversão acima
-                    diff = ((area_n - nova_area) / nova_area) * 100 if nova_area > 0 else 0
-                    cor = "#28a745" if abs(diff) < 3 else "#ffc107" if abs(diff) < 7 else "#dc3545"
-                    st.markdown(f"<div class='status-card' style='background:{cor}'>DIFERENÇA PARA NOVA TENSÃO: {diff:.2f}%</div>", unsafe_allow_html=True)
-                    
-                    col_res1, col_res2 = st.columns(2)
-                    col_res1.metric("Espaço na Ranhura", "OK" if diff < 5 else "Apertado")
-                    col_res2.metric("Risco de Queima", "Baixo" if diff > -4 else "ALTO (Falta Cobre)")
+                        st.markdown("#### 💡 Sugestões de Bitola para Nova Tensão:")
+                        sugs = gerar_sugestoes(nova_area)
+                        if sugs:
+                            for s in sugs[:3]:
+                                st.write(f"- {s['fio']} (Diferença: {s['diff']:.2f}%)")
+                        else:
+                            st.warning("Nenhuma combinação AWG próxima encontrada.")
 
             with tab3:
-                st.subheader("Gestão de Custos")
-                p_cobre = st.number_input("Preço KG Cobre (R$)", value=65.0, key=f"pc_{idx}")
-                peso = st.number_input("Peso do Cobre no Motor (KG)", value=1.0, key=f"ps_{idx}")
-                st.metric("Custo Total de Cobre", f"R$ {p_cobre * peso:.2f}")
+                st.subheader("📝 Edição Completa do Motor")
+                with st.form(f"form_total_ed_{idx}"):
+                    e1, e2, e3 = st.columns(3)
+                    with e1:
+                        new_marca = st.text_input("Marca", row['Marca'])
+                        new_cv = st.text_input("CV", row['Potencia_CV'])
+                        new_rpm = st.text_input("RPM", row['RPM'])
+                        new_vol = st.text_input("Voltagem", row['Voltagem'])
+                        new_amp = st.text_input("Amperagem", row['Amperagem'])
+                    with e2:
+                        new_fp = st.text_input("Fio Principal", row['Fio_Principal'])
+                        new_bp = st.text_input("Bobina Principal (Espiras)", row['Bobina_Principal'])
+                        new_fa = st.text_input("Fio Auxiliar", row['Fio_Auxiliar'])
+                        new_ba = st.text_input("Bobina Auxiliar (Espiras)", row['Bobina_Auxiliar'])
+                        new_pol = st.text_input("Polaridade/Pólos", row['Polaridade'])
+                    with e3:
+                        new_lig = st.selectbox("Ligação", lista_ligacoes, index=lista_ligacoes.index(row['Tipo_Ligacao']) if row['Tipo_Ligacao'] in lista_ligacoes else 0)
+                        new_rol = st.text_input("Rolamentos", row['Rolamentos'])
+                        new_ex = st.text_input("Eixo X", row['Eixo_X'])
+                        new_ey = st.text_input("Eixo Y", row['Eixo_Y'])
+                        new_cap = st.text_input("Capacitor", row['Capacitor'])
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    if col_btn1.form_submit_button("💾 SALVAR TODAS AS ALTERAÇÕES"):
+                        df_motores.loc[idx, 'Marca'] = new_marca
+                        df_motores.loc[idx, 'Potencia_CV'] = new_cv
+                        df_motores.loc[idx, 'RPM'] = new_rpm
+                        df_motores.loc[idx, 'Voltagem'] = new_vol
+                        df_motores.loc[idx, 'Amperagem'] = new_amp
+                        df_motores.loc[idx, 'Fio_Principal'] = new_fp
+                        df_motores.loc[idx, 'Bobina_Principal'] = new_bp
+                        df_motores.loc[idx, 'Fio_Auxiliar'] = new_fa
+                        df_motores.loc[idx, 'Bobina_Auxiliar'] = new_ba
+                        df_motores.loc[idx, 'Polaridade'] = new_pol
+                        df_motores.loc[idx, 'Tipo_Ligacao'] = new_lig
+                        df_motores.loc[idx, 'Rolamentos'] = new_rol
+                        df_motores.loc[idx, 'Eixo_X'] = new_ex
+                        df_motores.loc[idx, 'Eixo_Y'] = new_ey
+                        df_motores.loc[idx, 'Capacitor'] = new_cap
+                        salvar_dados(df_motores, ARQUIVO_CSV)
+                        st.success("Motor atualizado com sucesso!")
+                        st.rerun()
                 
                 st.divider()
-                if st.button("📝 EDITAR MOTOR", key=f"be_{idx}"):
-                    st.session_state[f"ed_{idx}"] = not st.session_state.get(f"ed_{idx}", False)
-                if st.button("🗑️ EXCLUIR", key=f"bd_{idx}"):
+                if st.button("🗑️ EXCLUIR MOTOR", key=f"bd_{idx}", type="secondary"):
                     df_motores.at[idx, 'status'] = 'deletado'
-                    salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+                    salvar_dados(df_motores, ARQUIVO_CSV)
+                    st.rerun()
 
-            if st.session_state.get(f"ed_{idx}"):
-                with st.form(f"form_ed_{idx}"):
-                    st.write("### Editar Informações")
-                    new_fp = st.text_input("Fio Principal", value=row['Fio_Principal'])
-                    new_amp = st.text_input("Amperagem", value=row['Amperagem'])
-                    if st.form_submit_button("Salvar"):
-                        df_motores.at[idx, 'Fio_Principal'] = new_fp
-                        df_motores.at[idx, 'Amperagem'] = new_amp
-                        salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
-
-# --- DEMAIS ABAS ---
+# --- DEMAIS ABAS PERMANECEM IGUAIS ---
 elif menu == "➕ NOVO MOTOR":
     st.header("➕ Cadastro de Novo Motor")
     with st.form("add"):
@@ -248,4 +264,4 @@ elif menu == "🗑️ LIXEIRA":
         col_l1, col_l2 = st.columns([3, 1])
         col_l1.write(f"Motor: {r['Marca']} {r['Potencia_CV']} CV")
         if col_l2.button("Restaurar", key=f"res_{i}"):
-            df_motores.at[i, 'status'] = 'active'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+            df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
