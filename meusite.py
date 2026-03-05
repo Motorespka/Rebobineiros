@@ -133,28 +133,45 @@ if menu == "🔍 CONSULTA":
                     else: st.caption("Sem esquema.")
 
             with tab2:
-                st.subheader("Ferramentas de Conversão")
+                st.subheader("🛠️ Conversor Técnico de Tensão e Amperagem")
                 
-                # CONVERSOR DE TENSÃO AUTOMÁTICO
+                # Tratamento de valores numéricos do banco
+                try:
+                    v_banco = float(re.findall(r'\d+', str(row['Voltagem']))[0]) if row['Voltagem'] else 220.0
+                    a_banco = float(str(row['Amperagem']).replace(',','.')) if row['Amperagem'] else 0.0
+                except:
+                    v_banco, a_banco = 220.0, 0.0
+
                 with st.container(border=True):
-                    st.markdown("**🔌 Conversor de Tensão Automático**")
+                    st.markdown("**🔌 Redimensionamento por Voltagem**")
                     col_v1, col_v2 = st.columns(2)
-                    v_de = col_v1.number_input("De (V):", value=220, key=f"vde_{idx}")
-                    v_para = col_v2.number_input("Para (V):", value=380, key=f"vpa_{idx}")
+                    
+                    tensoes = [110, 220, 380, 440, 680, 760]
+                    v_de = col_v1.selectbox("Tensão de Origem (V):", tensoes, index=tensoes.index(int(v_banco)) if int(v_banco) in tensoes else 1, key=f"vde_{idx}")
+                    v_para = col_v2.selectbox("Tensão de Destino (V):", tensoes, index=2, key=f"vpa_{idx}")
                     
                     if v_de > 0:
                         fator = v_para / v_de
-                        nova_area = area_ref / fator # Em alta tensão o fio é mais fino
-                        st.info(f"💡 **Resultado:** Aumentar espiras em **{fator:.2f}x**. Nova área de fio necessária: **{nova_area:.4f} mm²**")
-                
-                # SIMULADOR DE FIOS (O que você quer usar vs O que o motor pede)
+                        nova_amperagem = a_banco / fator
+                        nova_area = area_ref / fator
+                        
+                        st.markdown("---")
+                        res1, res2, res3 = st.columns(3)
+                        res1.metric("Nova Amperagem", f"{nova_amperagem:.2f} A")
+                        res2.metric("Fator Espiras", f"{fator:.2f} x")
+                        res3.metric("Nova Área Fio", f"{nova_area:.4f} mm²")
+                        
+                        st.info(f"👉 **Ação:** Multiplique as espiras originais por **{fator:.2f}**. O novo conjunto de fios deve somar **{nova_area:.4f} mm²**.")
+
+                # SIMULADOR DE FIOS (Agora comparando com a nova área calculada)
                 st.markdown("**🔄 Simulador de Viabilidade de Fios**")
-                fio_teste = st.text_input("Fio que você tem em mãos (Ex: 1x18 ou 2x21):", key=f"ft_{idx}")
+                fio_teste = st.text_input("Fio que você tem em mãos (Ex: 2x21):", key=f"ft_{idx}")
                 if fio_teste:
                     area_n = calcular_area_mm2(fio_teste)
-                    diff = ((area_n - area_ref) / area_ref) * 100 if area_ref > 0 else 0
+                    # Compara com a nova_area calculada na conversão acima
+                    diff = ((area_n - nova_area) / nova_area) * 100 if nova_area > 0 else 0
                     cor = "#28a745" if abs(diff) < 3 else "#ffc107" if abs(diff) < 7 else "#dc3545"
-                    st.markdown(f"<div class='status-card' style='background:{cor}'>DIFERENÇA: {diff:.2f}%</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='status-card' style='background:{cor}'>DIFERENÇA PARA NOVA TENSÃO: {diff:.2f}%</div>", unsafe_allow_html=True)
                     
                     col_res1, col_res2 = st.columns(2)
                     col_res1.metric("Espaço na Ranhura", "OK" if diff < 5 else "Apertado")
@@ -231,4 +248,4 @@ elif menu == "🗑️ LIXEIRA":
         col_l1, col_l2 = st.columns([3, 1])
         col_l1.write(f"Motor: {r['Marca']} {r['Potencia_CV']} CV")
         if col_l2.button("Restaurar", key=f"res_{i}"):
-            df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+            df_motores.at[i, 'status'] = 'active'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
