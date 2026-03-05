@@ -530,4 +530,4 @@ elif menu == "🗑️ LIXEIRA":
 
         if col_l2.button("Restaurar", key=f"res_{i}"):
 
-            df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun()
+            df_motores.at[i, 'status'] = 'ativo'; salvar_dados(df_motores, ARQUIVO_CSV); st.rerun
