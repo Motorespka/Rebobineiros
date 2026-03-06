@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import os
 
@@ -87,3 +86,4 @@ elif escolha == "Fornecedores":
     st.write("Cadastro de fornecedores, itens, preços e entregas.")
 
 # Rodando isso como app.py já funciona no Streamlit Cloud
+
