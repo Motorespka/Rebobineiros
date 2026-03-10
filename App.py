@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 
 page_mestre = None
-CHAVE_MESTRE = "Pablo123"
 
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -19,14 +18,16 @@ st.sidebar.title("Acesso")
 st.title("🌐 Bem-vindo ao Rebobineiro")
 st.markdown("Este site é feito de Rebobinador para Rebobinador!")
                  
-senha = st.sidebar.text_input("Chave mestre", type="password")
+CHAVE_MESTRE = st.secrets["senha_admin"]
+
+senha_digitada = st.sidebar.text_input("Chave mestre", type="password")
 
 if st.sidebar.button("Entrar"):
-    if senha == CHAVE_MESTRE:
+    if senha_digitada == CHAVE_MESTRE:
         st.session_state.logado = True
         st.sidebar.success("Acesso liberado")
-else:
-    st.sidebar.error("Chave incorreta")
+    else:
+        st.sidebar.error("Chave incorreta")
     st.sidebar.markdown("---")
 
 # --- Menu lateral ---
@@ -96,4 +97,5 @@ elif page == "Sobre":
     - Criado com [Streamlit](https://streamlit.io/)
     - Modelo básico atualizado sem bibliotecas extras
     - Ideal para dashboards, portfólios ou projetos de dados
+
     """)
