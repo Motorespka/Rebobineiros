@@ -1,101 +1,39 @@
-# app.py
-import streamlit as st
-import pandas as pd
+import streamlit as st # Corrigido o erro de digitação
+from dotenv import load_dotenv
+load_dotenv()
 
-page_mestre = None
+st.set_page_config(page_title="Rebobinagem Pro", layout="wide")
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-
-# --- Configurações da página ---
-st.set_page_config(
-    page_title="Rebobineiro",
-    page_icon="🌐",
-    layout="wide"
-)
-st.sidebar.title("Acesso")
-# --- Cabeçalho ---
-st.title("🌐 Bem-vindo ao Rebobineiro")
-st.markdown("Este site é feito de Rebobinador para Rebobinador!")
-                 
-CHAVE_MESTRE = st.secrets["senha_admin"]
-
-senha_digitada = st.sidebar.text_input("Chave mestre", type="password")
-
-if st.sidebar.button("Entrar"):
-    if senha_digitada == CHAVE_MESTRE:
-        st.session_state.logado = True
-        st.sidebar.success("Acesso liberado")
-    else:
-        st.sidebar.error("Chave incorreta")
-    st.sidebar.markdown("---")
-
-# --- Menu lateral ---
-st.sidebar.title("Menu")
-
-st.sidebar.markdown("### Consulta")
-page = st.sidebar.radio(
-    "",
-    ["Consultar Cálculo"]
-)
-
-if st.session_state.logado:
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Mestre")
-
-    page_mestre = st.sidebar.radio(
-    "",
-    ["Orçamento", "Cadastrar Motor", "Imagem"]
-)
-
-# define qual página está ativa
-if page_mestre: page = page_mestre
-    
-# --- Navegação ---
-if page == "Consultar Cálculo":
-    st.header("Consultar Cálculo")
-
-elif page == "Orçamento":
-    st.header("Orçamento")
-
-elif page == "Cadastrar Motor":
-    st.header("Cadastrar Motor")
-
-elif page == "Imagem":
-    st.header("Imagem")
-
-# --- Página Home ---
-if page == "Home":
-    st.header("Página Inicial")
-    st.write("Aqui você pode colocar informações sobre seu site, projetos ou serviços.")
-    st.image("https://via.placeholder.com/600x200.png?text=Imagem+de+Cabeçalho", width=600)
-
-# --- Página Dados ---
-elif page == "Dados":
-    st.header("Visualização de Dados")
-    # Exemplo de DataFrame
-    data = {
-        "Nome": ["Alice", "Bob", "Carlos", "Diana"],
-        "Idade": [25, 30, 22, 28],
-        "Cidade": ["São Paulo", "Rio de Janeiro", "Belo Horizonte", "Curitiba"]
+# CSS para estilização (corrigido as chaves e fechamento)
+st.markdown("""
+    <style>
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        background-color: #004a99;
+        color: white;
     }
-    df = pd.DataFrame(data)
-    st.dataframe(df)
-    
-    st.download_button(
-        label="Baixar dados",
-        data=df.to_csv(index=False).encode('utf-8'),
-        file_name='dados.csv',
-        mime='text/csv'
-    )
+    </style>
+""", unsafe_allow_html=True)
 
-# --- Página Sobre ---
-elif page == "Sobre":
-    st.header("Sobre Este Site")
-    st.markdown("""
-    - Criado com [Streamlit](https://streamlit.io/)
-    - Modelo básico atualizado sem bibliotecas extras
-    - Ideal para dashboards, portfólios ou projetos de dados
+st.title("Moto-Renow: Sistema Técnico de Rebobinagem")
+st.subheader("Gestão de cálculos e Motores Elétricos")
 
-    """)
+# Corrigido: Aspas e vírgulas nas abas
+aba1, aba2, aba3 = st.tabs([
+    "Cadastrar Novo Cálculo", 
+    "Consultar Cálculos", 
+    "Calcular"
+])
+
+# Importante: Verifique se seus arquivos estão na pasta 'pages' 
+# ou no mesmo diretório. Ajuste os imports conforme necessário.
+with aba1:
+    import Cadastro
+    Cadastro.show()
+with aba2:
+    import Consulta
+    Consulta.show()
+with aba3:
+    import Calculadora
+    Calculadora.show()
